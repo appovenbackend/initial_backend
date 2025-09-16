@@ -1,5 +1,6 @@
 import os
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
@@ -9,6 +10,9 @@ os.makedirs(DATA_DIR, exist_ok=True)
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
 EVENTS_FILE = os.path.join(DATA_DIR, "events.json")
 TICKETS_FILE = os.path.join(DATA_DIR, "tickets.json")
+
+# TIMEZONE
+IST = ZoneInfo("Asia/Kolkata")
 
 # SECURITY
 SECRET_KEY = "supersecretkey123"   # change for prod

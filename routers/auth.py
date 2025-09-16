@@ -2,9 +2,8 @@ from fastapi import APIRouter, HTTPException
 from uuid import uuid4
 from datetime import datetime
 from utils.filedb import read_json, write_json
-from core.config import USERS_FILE
+from core.config import USERS_FILE, IST
 from models.user import UserIn, User
-from zoneinfo import ZoneInfo
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -17,18 +16,37 @@ def _save_users(data):
 @router.post("/login")
 def login(user_in: UserIn):
     users = _load_users()
-    if any(u["phone"] == user_in.phone for u in users):
-        raise HTTPException(status_code=400, detail="Phone already registered")
+
+    # Check if user already exists with this phone number
+    existing_user = next((u for u in users if u["phone"] == user_in.phone), None)
+
+    if existing_user:
+        # User exists, return existing user info
+        return {
+            "msg": "login_successful",
+            "userId": existing_user["id"],
+            "name": existing_user["name"],
+            "phone": existing_user["phone"],
+            "createdAt": existing_user["createdAt"]
+        }
+
+    # User doesn't exist, create new user
     new_user = User(
         id="u_" + uuid4().hex[:10],
         name=user_in.name,
         phone=user_in.phone,
         role="user",
-        createdAt=datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
+        createdAt=datetime.now(IST).isoformat()
     ).dict()
     users.append(new_user)
     _save_users(users)
-    return {"msg": "registered", "userId": new_user["id"]}
+    return {
+        "msg": "registered",
+        "userId": new_user["id"],
+        "name": new_user["name"],
+        "phone": new_user["phone"],
+        "createdAt": new_user["createdAt"]
+    }
 
 @router.get("/user/{phone}")
 def get_user_by_phone(phone: str):

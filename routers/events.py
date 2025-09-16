@@ -1,11 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends
 from uuid import uuid4
-from datetime import datetime, timezone
+from datetime import datetime
 from dateutil import parser
-from zoneinfo import ZoneInfo
 from models.event import CreateEventIn, Event
 from utils.filedb import read_json, write_json
-from core.config import EVENTS_FILE
+from core.config import EVENTS_FILE, IST
 from typing import List
 
 router = APIRouter(prefix="/events", tags=["Events"])
@@ -16,24 +15,24 @@ def _load_events():
 def _save_events(data):
     write_json(EVENTS_FILE, data)
 
-def _now_utc():
-    return datetime.now(timezone.utc)
+def _now_ist():
+    return datetime.now(IST)
 
-def _to_utc(dt_iso: str):
+def _to_ist(dt_iso: str):
     dt = parser.isoparse(dt_iso)
     if dt.tzinfo is None:
         # treat incoming ISO as IST when naive
-        dt = dt.replace(tzinfo=ZoneInfo("Asia/Kolkata"))
-    return dt.astimezone(timezone.utc)
+        dt = dt.replace(tzinfo=IST)
+    return dt.astimezone(IST)
 
 def expire_events_if_needed():
     events = _load_events()
     changed = False
-    now = _now_utc()
+    now = _now_ist()
     for e in events:
         try:
-            end_utcdt = _to_utc(e["endAt"])
-            if e.get("isActive", True) and end_utcdt <= now:
+            end_ist_dt = _to_ist(e["endAt"])
+            if e.get("isActive", True) and end_ist_dt <= now:
                 e["isActive"] = False
                 changed = True
         except Exception:
@@ -57,7 +56,7 @@ def create_event(ev: CreateEventIn):
         reserved=0,
         bannerUrl=ev.bannerUrl,
         isActive=ev.isActive if ev.isActive is not None else True,
-        createdAt=datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
+        createdAt=datetime.now(IST).isoformat()
     ).dict()
     events.append(new_ev)
     _save_events(events)
@@ -67,11 +66,11 @@ def create_event(ev: CreateEventIn):
 def list_events():
     expire_events_if_needed()
     events = _load_events()
-    now = _now_utc()
+    now = _now_ist()
     results = []
     for e in events:
         try:
-            end = _to_utc(e["endAt"])
+            end = _to_ist(e["endAt"])
             if e.get("isActive", True) and end > now:
                 results.append(Event(**e))
         except Exception:
@@ -87,8 +86,8 @@ def get_event(event_id: str):
         raise HTTPException(status_code=404, detail="Event not found")
     # expire check for this event
     try:
-        end = _to_utc(e["endAt"])
-        if end <= _now_utc():
+        end = _to_ist(e["endAt"])
+        if end <= _now_ist():
             e["isActive"] = False
             _save_events(events)
             raise HTTPException(status_code=404, detail="Event expired")

@@ -1,12 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import auth, events, tickets
+from threading import Lock
+
+# Global lock for file operations (used by all modules)
+file_lock = Lock()
 
 app = FastAPI(title="Fitness Event Booking API (IST)")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # restrict in prod
+    allow_origins=["*"],   
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

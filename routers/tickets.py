@@ -1,39 +1,62 @@
 from fastapi import APIRouter, HTTPException
 from uuid import uuid4
-from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime
 from dateutil import parser
 from utils.filedb import read_json, write_json
-from core.config import USERS_FILE, EVENTS_FILE, TICKETS_FILE
+from core.config import USERS_FILE, EVENTS_FILE, TICKETS_FILE, IST
 from services.payment_service import create_order
 from services.qr_service import create_qr_token, generate_qr_image
 from models.ticket import Ticket
+from threading import Lock
 import json
 
 router = APIRouter(prefix="", tags=["Tickets"])
 
-def _load(path):
-    return read_json(path)
+# Thread safety locks
+users_lock = Lock()
+events_lock = Lock()
+tickets_lock = Lock()
 
-def _save(path, data):
-    write_json(path, data)
+def _load_users():
+    with users_lock:
+        return read_json(USERS_FILE)
+
+def _save_users(data):
+    with users_lock:
+        write_json(USERS_FILE, data)
+
+def _load_events():
+    with events_lock:
+        return read_json(EVENTS_FILE)
+
+def _save_events(data):
+    with events_lock:
+        write_json(EVENTS_FILE, data)
+
+def _load_tickets():
+    with tickets_lock:
+        return read_json(TICKETS_FILE)
+
+def _save_tickets(data):
+    with tickets_lock:
+        write_json(TICKETS_FILE, data)
 
 def _now_ist_iso():
-    return datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
+    return datetime.now(IST).isoformat()
 
-def _to_utc(dt_iso: str):
+def _to_ist(dt_iso: str):
     dt = parser.isoparse(dt_iso)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=ZoneInfo("Asia/Kolkata"))
-    return dt.astimezone(timezone.utc)
+        dt = dt.replace(tzinfo=IST)
+    return dt.astimezone(IST)
 
 @router.post("/create-order")
 def api_create_order(phone: str, eventId: str):
-    users = _load(USERS_FILE)
+    users = _load_users()
     user = next((u for u in users if u["phone"] == phone), None)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    events = _load(EVENTS_FILE)
+    events = _load_events()
     ev = next((e for e in events if e["id"] == eventId), None)
     if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -47,18 +70,18 @@ def register_free(payload: dict):
     """
     phone = payload.get("phone")
     eventId = payload.get("eventId")
-    users = _load(USERS_FILE)
+    users = _load_users()
     user = next((u for u in users if u["phone"] == phone), None)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     userId = user["id"]
-    events = _load(EVENTS_FILE)
+    events = _load_events()
     ev = next((e for e in events if e["id"] == eventId), None)
     if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
     # expire check
     try:
-        if _to_utc(ev["endAt"]) <= datetime.now(timezone.utc) or not ev.get("isActive", True):
+        if _to_ist(ev["endAt"]) <= datetime.now(IST) or not ev.get("isActive", True):
             raise HTTPException(status_code=400, detail="Event not active/expired")
     except HTTPException:
         raise
@@ -68,12 +91,12 @@ def register_free(payload: dict):
     # reserve seat
     ev["reserved"] = ev.get("reserved", 0) + 1
     # persist events
-    all_events = _load(EVENTS_FILE)
+    all_events = _load_events()
     for i, e in enumerate(all_events):
         if e["id"] == ev["id"]:
             all_events[i] = ev
             break
-    _save(EVENTS_FILE, all_events)
+    _save_events(all_events)
 
     # create ticket
     ticket_id = "t_" + uuid4().hex[:10]
@@ -94,9 +117,9 @@ def register_free(payload: dict):
         meta={"kind": "free", "qrImagePath": qr_path}
     ).dict()
 
-    tickets = _load(TICKETS_FILE)
+    tickets = _load_tickets()
     tickets.append(new_ticket)
-    _save(TICKETS_FILE, tickets)
+    _save_tickets(tickets)
     return new_ticket
 
 @router.post("/register/paid", response_model=Ticket)
@@ -107,12 +130,12 @@ def register_paid(payload: dict):
     """
     phone = payload.get("phone")
     eventId = payload.get("eventId")
-    users = _load(USERS_FILE)
+    users = _load_users()
     user = next((u for u in users if u["phone"] == phone), None)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     userId = user["id"]
-    events = _load(EVENTS_FILE)
+    events = _load_events()
     ev = next((e for e in events if e["id"] == eventId), None)
     if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -123,12 +146,12 @@ def register_paid(payload: dict):
         raise HTTPException(status_code=400, detail="Event full")
     # reserve seat
     ev["reserved"] = ev.get("reserved", 0) + 1
-    all_events = _load(EVENTS_FILE)
+    all_events = _load_events()
     for i, e in enumerate(all_events):
         if e["id"] == ev["id"]:
             all_events[i] = ev
             break
-    _save(EVENTS_FILE, all_events)
+    _save_events(all_events)
 
     ticket_id = "t_" + uuid4().hex[:10]
     issued = _now_ist_iso()
@@ -147,19 +170,19 @@ def register_paid(payload: dict):
         meta={"kind": "paid", "amount": ev["priceINR"], "orderId": payload.get("orderId"), "qrImagePath": qr_path}
     ).dict()
 
-    tickets = _load(TICKETS_FILE)
+    tickets = _load_tickets()
     tickets.append(new_ticket)
-    _save(TICKETS_FILE, tickets)
+    _save_tickets(tickets)
     return new_ticket
 
 @router.get("/tickets/{user_id}")
 def get_tickets_for_user(user_id: str):
-    tickets = _load(TICKETS_FILE)
+    tickets = _load_tickets()
     return [t for t in tickets if t["userId"] == user_id]
 
 @router.get("/tickets/ticket/{ticket_id}")
 def get_ticket(ticket_id: str):
-    tickets = _load(TICKETS_FILE)
+    tickets = _load_tickets()
     t = next((x for x in tickets if x["id"] == ticket_id), None)
     if not t:
         raise HTTPException(status_code=404, detail="Ticket not found")
@@ -191,7 +214,7 @@ def validate_token(body: dict):
     user_id = decoded.get("user_id")
     event_id = decoded.get("event_id")
 
-    tickets = _load(TICKETS_FILE)
+    tickets = _load_tickets()
     ticket = next((t for t in tickets if t["id"] == ticket_id), None)
     if not ticket:
         return {"status": "invalid", "reason": "ticket_not_found"}
@@ -201,17 +224,17 @@ def validate_token(body: dict):
         return {"status": "invalid", "reason": "claim_mismatch"}
 
     # check event expiry
-    events = _load(EVENTS_FILE)
+    events = _load_events()
     ev = next((e for e in events if e["id"] == event_id), None)
     if ev:
         try:
-            if _to_utc(ev["endAt"]) <= datetime.now(timezone.utc):
+            if _to_ist(ev["endAt"]) <= datetime.now(IST):
                 return {"status": "invalid", "reason": "event_expired"}
         except Exception:
             pass
 
     # get user info
-    users = _load(USERS_FILE)
+    users = _load_users()
     user = next((u for u in users if u["id"] == user_id), None)
 
     if ticket.get("isValidated", False):
@@ -225,7 +248,7 @@ def validate_token(body: dict):
         }
 
     # mark validated
-    validated_at = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
+    validated_at = _now_ist_iso()
     ticket["isValidated"] = True
     ticket["validatedAt"] = validated_at
     hist = ticket.get("validationHistory") or []
@@ -233,12 +256,12 @@ def validate_token(body: dict):
     ticket["validationHistory"] = hist
 
     # persist tickets
-    all_tickets = _load(TICKETS_FILE)
+    all_tickets = _load_tickets()
     for i, t in enumerate(all_tickets):
         if t["id"] == ticket["id"]:
             all_tickets[i] = ticket
             break
-    _save(TICKETS_FILE, all_tickets)
+    _save_tickets(all_tickets)
 
     return {
         "status": "valid",
