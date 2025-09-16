@@ -28,7 +28,11 @@ def _to_utc(dt_iso: str):
     return dt.astimezone(timezone.utc)
 
 @router.post("/create-order")
-def api_create_order(userId: str, eventId: str):
+def api_create_order(phone: str, eventId: str):
+    users = _load(USERS_FILE)
+    user = next((u for u in users if u["phone"] == phone), None)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     events = _load(EVENTS_FILE)
     ev = next((e for e in events if e["id"] == eventId), None)
     if not ev:
@@ -39,13 +43,15 @@ def api_create_order(userId: str, eventId: str):
 @router.post("/register/free", response_model=Ticket)
 def register_free(payload: dict):
     """
-    payload: { "userId": "...", "eventId": "..." }
+    payload: { "phone": "...", "eventId": "..." }
     """
-    userId = payload.get("userId")
+    phone = payload.get("phone")
     eventId = payload.get("eventId")
     users = _load(USERS_FILE)
-    if not any(u["id"] == userId for u in users):
+    user = next((u for u in users if u["phone"] == phone), None)
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    userId = user["id"]
     events = _load(EVENTS_FILE)
     ev = next((e for e in events if e["id"] == eventId), None)
     if not ev:
@@ -96,14 +102,16 @@ def register_free(payload: dict):
 @router.post("/register/paid", response_model=Ticket)
 def register_paid(payload: dict):
     """
-    payload: { "userId": "...", "eventId": "...", "orderId": "..." }
+    payload: { "phone": "...", "eventId": "...", "orderId": "..." }
     This simulates post-payment confirmation.
     """
-    userId = payload.get("userId")
+    phone = payload.get("phone")
     eventId = payload.get("eventId")
     users = _load(USERS_FILE)
-    if not any(u["id"] == userId for u in users):
+    user = next((u for u in users if u["phone"] == phone), None)
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    userId = user["id"]
     events = _load(EVENTS_FILE)
     ev = next((e for e in events if e["id"] == eventId), None)
     if not ev:
