@@ -14,8 +14,8 @@ def _load_users():
 def _save_users(data):
     write_json(USERS_FILE, data)
 
-@router.post("/register")
-def register(user_in: UserIn):
+@router.post("/login")
+def login(user_in: UserIn):
     users = _load_users()
     if any(u["phone"] == user_in.phone for u in users):
         raise HTTPException(status_code=400, detail="Phone already registered")
