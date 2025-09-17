@@ -2,11 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import auth, events, tickets
-from threading import Lock
 import uvicorn
-
-# Global lock for file operations (used by all modules)
-file_lock = Lock()
 
 app = FastAPI(title="Fitness Event Booking API (IST)")
 

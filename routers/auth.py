@@ -1,17 +1,17 @@
 from fastapi import APIRouter, HTTPException
 from uuid import uuid4
 from datetime import datetime
-from utils.filedb import read_json, write_json
-from core.config import USERS_FILE, IST
+from utils.filedb import read_users, write_users
+from core.config import IST
 from models.user import UserIn, User
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 def _load_users():
-    return read_json(USERS_FILE)
+    return read_users()
 
 def _save_users(data):
-    write_json(USERS_FILE, data)
+    write_users(data)
 
 @router.post("/login")
 def login(user_in: UserIn):

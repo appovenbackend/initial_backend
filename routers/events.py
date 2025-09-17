@@ -3,17 +3,18 @@ from uuid import uuid4
 from datetime import datetime
 from dateutil import parser
 from models.event import CreateEventIn, Event
-from utils.filedb import read_json, write_json
-from core.config import EVENTS_FILE, IST
+from models.user import User
+from utils.filedb import read_events, write_events, read_tickets, read_users
+from core.config import IST
 from typing import List
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
 def _load_events():
-    return read_json(EVENTS_FILE)
+    return read_events()
 
 def _save_events(data):
-    write_json(EVENTS_FILE, data)
+    write_events(data)
 
 def _now_ist():
     return datetime.now(IST)
@@ -96,3 +97,36 @@ def get_event(event_id: str):
     except Exception:
         pass
     return Event(**e)
+
+@router.get("/{event_id}/registered_users", response_model=List[User])
+def get_registered_users_for_event(event_id: str):
+    # Check if event exists
+    events = _load_events()
+    e = next((x for x in events if x["id"] == event_id), None)
+    if not e:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    # Load tickets for this event
+    tickets = read_tickets()
+    event_tickets = [t for t in tickets if t["eventId"] == event_id]
+
+    # Get unique user IDs
+    user_ids = list(set(t["userId"] for t in event_tickets))
+
+    # Load users
+    users = read_users()
+    registered_users = [User(**u) for u in users if u["id"] in user_ids]
+
+    return registered_users
+
+@router.put("/{event_id}/deactivate")
+def deactivate_event(event_id: str):
+    events = _load_events()
+    e = next((x for x in events if x["id"] == event_id), None)
+    if not e:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not e.get("isActive", True):
+        raise HTTPException(status_code=400, detail="Event already inactive")
+    e["isActive"] = False
+    _save_events(events)
+    return {"message": "Event deactivated successfully"}

@@ -5,3 +5,4 @@ qrcode==7.4
 Pillow
 python-dateutil==2.8.2
 tzdata
+passlib[bcrypt]

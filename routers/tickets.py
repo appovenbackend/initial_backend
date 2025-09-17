@@ -2,44 +2,32 @@ from fastapi import APIRouter, HTTPException
 from uuid import uuid4
 from datetime import datetime
 from dateutil import parser
-from utils.filedb import read_json, write_json
-from core.config import USERS_FILE, EVENTS_FILE, TICKETS_FILE, IST
+from utils.filedb import read_users, write_users, read_events, write_events, read_tickets, write_tickets
+from core.config import IST
 from services.payment_service import create_order
 from services.qr_service import create_qr_token, generate_qr_image
 from models.ticket import Ticket
-from threading import Lock
 import json
 
 router = APIRouter(prefix="", tags=["Tickets"])
 
-# Thread safety locks
-users_lock = Lock()
-events_lock = Lock()
-tickets_lock = Lock()
-
 def _load_users():
-    with users_lock:
-        return read_json(USERS_FILE)
+    return read_users()
 
 def _save_users(data):
-    with users_lock:
-        write_json(USERS_FILE, data)
+    write_users(data)
 
 def _load_events():
-    with events_lock:
-        return read_json(EVENTS_FILE)
+    return read_events()
 
 def _save_events(data):
-    with events_lock:
-        write_json(EVENTS_FILE, data)
+    write_events(data)
 
 def _load_tickets():
-    with tickets_lock:
-        return read_json(TICKETS_FILE)
+    return read_tickets()
 
 def _save_tickets(data):
-    with tickets_lock:
-        write_json(TICKETS_FILE, data)
+    write_tickets(data)
 
 def _now_ist_iso():
     return datetime.now(IST).isoformat()
