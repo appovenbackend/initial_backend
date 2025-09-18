@@ -129,17 +129,6 @@ def register_paid(payload: dict):
         raise HTTPException(status_code=404, detail="Event not found")
     if ev.get("priceINR", 0) == 0:
         raise HTTPException(status_code=400, detail="Event is free; use free register")
-    # capacity check
-    if ev.get("capacity", 0) > 0 and ev.get("reserved", 0) >= ev.get("capacity", 0):
-        raise HTTPException(status_code=400, detail="Event full")
-    # reserve seat
-    ev["reserved"] = ev.get("reserved", 0) + 1
-    all_events = _load_events()
-    for i, e in enumerate(all_events):
-        if e["id"] == ev["id"]:
-            all_events[i] = ev
-            break
-    _save_events(all_events)
 
     ticket_id = "t_" + uuid4().hex[:10]
     issued = _now_ist_iso()

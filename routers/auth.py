@@ -6,7 +6,8 @@ from core.config import IST, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SECRET_KEY,
 from models.user import UserIn, User
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
-import jwt, os
+import os
+from jose import jwt
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 

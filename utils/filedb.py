@@ -50,8 +50,6 @@ def init_db():
                 startAt TEXT,
                 endAt TEXT,
                 priceINR INTEGER,
-                capacity INTEGER,
-                reserved INTEGER DEFAULT 0,
                 bannerUrl TEXT,
                 isActive INTEGER DEFAULT 1,
                 createdAt TEXT
@@ -107,7 +105,7 @@ def read_events():
         conn.close()
         result = []
         for row in rows:
-            d = dict(zip(['id', 'title', 'description', 'city', 'venue', 'startAt', 'endAt', 'priceINR', 'capacity', 'reserved', 'bannerUrl', 'isActive', 'createdAt'], row))
+            d = dict(zip(['id', 'title', 'description', 'city', 'venue', 'startAt', 'endAt', 'priceINR', 'bannerUrl', 'isActive', 'createdAt'], row))
             d['isActive'] = bool(d['isActive'])
             result.append(d)
         return result
@@ -117,8 +115,8 @@ def write_events(data):
         conn = get_db()
         cursor = conn.cursor()
         for item in data:
-            cursor.execute("INSERT OR REPLACE INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                           (item['id'], item['title'], item['description'], item['city'], item['venue'], item['startAt'], item['endAt'], item['priceINR'], item['capacity'], item.get('reserved', 0), item.get('bannerUrl'), 1 if item.get('isActive', True) else 0, item['createdAt']))
+            cursor.execute("INSERT OR REPLACE INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           (item['id'], item['title'], item['description'], item['city'], item['venue'], item['startAt'], item['endAt'], item['priceINR'], item.get('bannerUrl'), 1 if item.get('isActive', True) else 0, item['createdAt']))
         conn.commit()
         conn.close()
 

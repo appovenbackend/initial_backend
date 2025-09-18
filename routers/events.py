@@ -53,8 +53,6 @@ def create_event(ev: CreateEventIn):
         startAt=ev.startAt,
         endAt=ev.endAt,
         priceINR=ev.priceINR,
-        capacity=ev.capacity or 0,
-        reserved=0,
         bannerUrl=ev.bannerUrl,
         isActive=ev.isActive if ev.isActive is not None else True,
         createdAt=datetime.now(IST).isoformat()
@@ -98,7 +96,7 @@ def get_event(event_id: str):
         pass
     return Event(**e)
 
-@router.get("/{event_id}/registered_users", response_model=List[User])
+@router.get("/{event_id}/registered_users")
 def get_registered_users_for_event(event_id: str):
     # Check if event exists
     events = _load_events()
@@ -117,7 +115,24 @@ def get_registered_users_for_event(event_id: str):
     users = read_users()
     registered_users = [User(**u) for u in users if u["id"] in user_ids]
 
-    return registered_users
+    return {
+        "count": len(registered_users),
+        "users": registered_users
+    }
+
+@router.put("/{event_id}/update_price")
+def update_event_price(event_id: str, new_price: int):
+    if new_price < 0:
+        raise HTTPException(status_code=400, detail="Price cannot be negative")
+    
+    events = _load_events()
+    e = next((x for x in events if x["id"] == event_id), None)
+    if not e:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    e["priceINR"] = new_price
+    _save_events(events)
+    return {"message": "Event price updated successfully", "new_price": new_price}
 
 @router.put("/{event_id}/deactivate")
 def deactivate_event(event_id: str):

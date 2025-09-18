@@ -6,10 +6,9 @@ class CreateEventIn(BaseModel):
     description: str
     city: str
     venue: str
-    startAt: str 
-    endAt: str    
+    startAt: str
+    endAt: str
     priceINR: int
-    capacity: Optional[int] = 0
     bannerUrl: Optional[str] = None
     isActive: Optional[bool] = True
 
@@ -22,8 +21,6 @@ class Event(BaseModel):
     startAt: str
     endAt: str
     priceINR: int
-    capacity: int
-    reserved: int = 0
     bannerUrl: Optional[str] = None
     isActive: bool = True
     createdAt: str
