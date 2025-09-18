@@ -165,6 +165,13 @@ def get_ticket(ticket_id: str):
         raise HTTPException(status_code=404, detail="Ticket not found")
     return t
 
+@router.post("/receiveQrToken")
+def receive_qr_token(token: str):
+    """
+    Receives QR token string from frontend.
+    """
+    return {"received_token": token, "status": "received"}
+
 @router.post("/validate")
 def validate_token(body: dict):
     """
