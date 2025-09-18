@@ -19,10 +19,26 @@ def init_db():
                 id TEXT PRIMARY KEY,
                 name TEXT,
                 phone TEXT UNIQUE,
+                email TEXT,
+                picture TEXT,
+                google_id TEXT UNIQUE,
                 role TEXT DEFAULT 'user',
                 createdAt TEXT
             )
         ''')
+        # Add new columns if not exist
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        except:
+            pass
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN picture TEXT")
+        except:
+            pass
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN google_id TEXT UNIQUE")
+        except:
+            pass
         # Events table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS events (
@@ -70,15 +86,15 @@ def read_users():
         cursor.execute("SELECT * FROM users")
         rows = cursor.fetchall()
         conn.close()
-        return [dict(zip(['id', 'name', 'phone', 'role', 'createdAt'], row)) for row in rows]
+        return [dict(zip(['id', 'name', 'phone', 'email', 'picture', 'google_id', 'role', 'createdAt'], row)) for row in rows]
 
 def write_users(data):
     with lock:
         conn = get_db()
         cursor = conn.cursor()
         for item in data:
-            cursor.execute("INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?)",
-                           (item['id'], item['name'], item['phone'], item.get('role', 'user'), item['createdAt']))
+            cursor.execute("INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                           (item['id'], item['name'], item.get('phone'), item.get('email'), item.get('picture'), item.get('google_id'), item.get('role', 'user'), item['createdAt']))
         conn.commit()
         conn.close()
 

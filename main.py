@@ -1,18 +1,23 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from routers import auth, events, tickets
+from core.config import SECRET_KEY
 import uvicorn
 
 app = FastAPI(title="Fitness Event Booking API (IST)")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add session middleware for OAuth
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 app.include_router(auth.router)
 app.include_router(events.router)

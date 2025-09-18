@@ -6,3 +6,5 @@ Pillow
 python-dateutil==2.8.2
 tzdata
 passlib[bcrypt]
+authlib==1.2.1
+python-dotenv==1.0.0

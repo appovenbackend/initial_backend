@@ -8,6 +8,9 @@ class UserIn(BaseModel):
 class User(BaseModel):
     id: str
     name: str
-    phone: str
-    role: Optional[str] = "user"
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    picture: Optional[str] = None
+    google_id: Optional[str] = None
+    role: str = "user"
     createdAt: str
