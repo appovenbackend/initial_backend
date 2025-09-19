@@ -3,8 +3,7 @@ Database utilities supporting both SQLite (local) and PostgreSQL (Railway produc
 """
 import os
 from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, scoped_session
 from datetime import datetime
 from core.config import DATABASE_URL, DATABASE_FILE, USE_POSTGRESQL, IST
 
@@ -17,7 +16,9 @@ else:
     engine = create_engine(f"sqlite:///{DATABASE_FILE}", connect_args={"check_same_thread": False})
 
 SessionLocal = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=engine))
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
 
 # Database Models
 class UserDB(Base):
