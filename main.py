@@ -4,7 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from routers import auth, events, tickets
 from core.config import SECRET_KEY, IST
-from utils.database import read_events, write_events
+from utils.database import read_events, write_events, get_database_session
+from core.config import USE_POSTGRESQL, DATABASE_URL
 from datetime import datetime, timedelta
 import uvicorn
 
@@ -37,6 +38,37 @@ app.include_router(tickets.router)
 @app.get("/")
 def root():
     return {"msg": "Fitness Event Booking API running (times shown in IST)."}
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint to verify database connection and configuration"""
+    try:
+        # Test database connection
+        from sqlalchemy import text
+        db = get_database_session()
+        result = db.execute(text("SELECT 1"))
+        db.close()
+
+        return {
+            "status": "healthy",
+            "database": {
+                "type": "PostgreSQL" if USE_POSTGRESQL else "SQLite",
+                "postgresql_enabled": USE_POSTGRESQL,
+                "database_url_present": bool(DATABASE_URL)
+            },
+            "timestamp": datetime.now(IST).isoformat()
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "database": {
+                "type": "PostgreSQL" if USE_POSTGRESQL else "SQLite",
+                "postgresql_enabled": USE_POSTGRESQL,
+                "database_url_present": bool(DATABASE_URL)
+            },
+            "timestamp": datetime.now(IST).isoformat()
+        }
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))  # Railway injects PORT

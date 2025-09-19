@@ -16,6 +16,16 @@ DATABASE_FILE = os.path.join(DATA_DIR, "app.db")  # Local SQLite fallback
 # Use PostgreSQL if DATABASE_URL is provided (Railway), otherwise use SQLite
 USE_POSTGRESQL = bool(DATABASE_URL)
 
+# Debug logging for database configuration
+print("=== DATABASE CONFIGURATION ===")
+print(f"DATABASE_URL present: {bool(DATABASE_URL)}")
+print(f"USE_POSTGRESQL: {USE_POSTGRESQL}")
+if DATABASE_URL:
+    print(f"DATABASE_URL starts with: {DATABASE_URL[:20]}...")
+else:
+    print(f"Using SQLite: {DATABASE_FILE}")
+print("===============================")
+
 # TIMEZONE
 IST = timezone(timedelta(hours=5, minutes=30))
 
