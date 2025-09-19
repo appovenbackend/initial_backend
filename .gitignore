@@ -91,5 +91,11 @@ Thumbs.db
 data/*.json
 # QR images
 data/qrs/
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+data/app.db
+data/*.db
 # Logs
 *.log

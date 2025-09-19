@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from uuid import uuid4
 from datetime import datetime, timedelta
-from utils.filedb import read_users, write_users
+from utils.database import read_users, write_users
 from core.config import IST, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SECRET_KEY, ALGORITHM
 from models.user import UserIn, User
 from authlib.integrations.starlette_client import OAuth

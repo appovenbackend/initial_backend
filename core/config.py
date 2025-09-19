@@ -9,7 +9,12 @@ PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
-DATABASE_FILE = os.path.join(DATA_DIR, "app.db")
+# Database configuration for Railway deployment
+DATABASE_URL = os.getenv("DATABASE_URL")  # Railway PostgreSQL
+DATABASE_FILE = os.path.join(DATA_DIR, "app.db")  # Local SQLite fallback
+
+# Use PostgreSQL if DATABASE_URL is provided (Railway), otherwise use SQLite
+USE_POSTGRESQL = bool(DATABASE_URL)
 
 # TIMEZONE
 IST = timezone(timedelta(hours=5, minutes=30))

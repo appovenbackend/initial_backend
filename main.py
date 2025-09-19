@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from routers import auth, events, tickets
 from core.config import SECRET_KEY, IST
-from utils.filedb import read_events, write_events
+from utils.database import read_events, write_events
 from datetime import datetime, timedelta
 import uvicorn
 
