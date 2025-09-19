@@ -187,8 +187,7 @@ def receive_qr_token(token: str):
         new_received_token = {
             "id": received_token_id,
             "token": token,
-            "receivedAt": received_at,
-            "source": None  # Add source field to match database schema
+            "receivedAt": received_at
         }
 
         # Store in database
