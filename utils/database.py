@@ -1,6 +1,3 @@
-"""
-Database utilities supporting both SQLite (local) and PostgreSQL (Railway production)
-"""
 import os
 from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
@@ -11,7 +8,12 @@ from core.config import DATABASE_URL, DATABASE_FILE, USE_POSTGRESQL, IST
 # Create SQLAlchemy engine
 if USE_POSTGRESQL and DATABASE_URL:
     # Railway PostgreSQL with pg8000 (Python 3.13 compatible)
-    engine = create_engine(DATABASE_URL.replace('postgresql://', 'postgresql+pg8000://'), pool_pre_ping=True)
+    # Forcefully use pg8000 driver
+    engine = create_engine(
+        DATABASE_URL.replace('postgresql://', 'postgresql+pg8000://'),
+        pool_pre_ping=True,
+        connect_args={"sslmode": "require"}
+    )
 else:
     # Local SQLite
     engine = create_engine(f"sqlite:///{DATABASE_FILE}", connect_args={"check_same_thread": False})
