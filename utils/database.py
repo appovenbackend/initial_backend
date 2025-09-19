@@ -1,4 +1,5 @@
 import os
+import json
 from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
@@ -174,6 +175,25 @@ def read_tickets():
         for ticket in tickets:
             ticket_dict = ticket.__dict__.copy()
             ticket_dict.pop('_sa_instance_state', None)
+
+            # Deserialize JSON fields back to Python objects for PostgreSQL compatibility
+            if USE_POSTGRESQL:
+                if ticket_dict.get('validationHistory') is not None:
+                    try:
+                        ticket_dict['validationHistory'] = json.loads(ticket_dict['validationHistory'])
+                    except (json.JSONDecodeError, TypeError):
+                        ticket_dict['validationHistory'] = []
+                else:
+                    ticket_dict['validationHistory'] = []
+
+                if ticket_dict.get('meta') is not None:
+                    try:
+                        ticket_dict['meta'] = json.loads(ticket_dict['meta'])
+                    except (json.JSONDecodeError, TypeError):
+                        ticket_dict['meta'] = {}
+                else:
+                    ticket_dict['meta'] = {}
+
             result.append(ticket_dict)
         return result
     finally:
@@ -198,6 +218,14 @@ def write_tickets(data):
                 'validationHistory': ticket_data.get('validationHistory'),
                 'meta': ticket_data.get('meta')
             }
+
+            # Serialize dict/list fields to JSON strings for PostgreSQL compatibility
+            if USE_POSTGRESQL:
+                if filtered_data.get('validationHistory') is not None:
+                    filtered_data['validationHistory'] = json.dumps(filtered_data['validationHistory'])
+                if filtered_data.get('meta') is not None:
+                    filtered_data['meta'] = json.dumps(filtered_data['meta'])
+
             # Remove None values for required fields
             filtered_data = {k: v for k, v in filtered_data.items() if k in ['id', 'eventId', 'userId', 'qrToken', 'issuedAt'] or v is not None}
             ticket = TicketDB(**filtered_data)
