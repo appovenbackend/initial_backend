@@ -2,9 +2,9 @@
 Database utilities supporting both SQLite (local) and PostgreSQL (Railway production)
 """
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, scoped_session
 from datetime import datetime
 from core.config import DATABASE_URL, DATABASE_FILE, USE_POSTGRESQL, IST
 
@@ -16,7 +16,7 @@ else:
     # Local SQLite
     engine = create_engine(f"sqlite:///{DATABASE_FILE}", connect_args={"check_same_thread": False})
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=engine))
 Base = declarative_base()
 
 # Database Models
@@ -93,9 +93,15 @@ def read_users():
     db = SessionLocal()
     try:
         users = db.query(UserDB).all()
-        return [user.__dict__ for user in users]
+        result = []
+        for user in users:
+            user_dict = user.__dict__.copy()
+            # Remove SQLAlchemy internal fields
+            user_dict.pop('_sa_instance_state', None)
+            result.append(user_dict)
+        return result
     finally:
-        db.close()
+        SessionLocal.remove()
 
 def write_users(data):
     db = SessionLocal()
@@ -108,7 +114,7 @@ def write_users(data):
             db.add(user)
         db.commit()
     finally:
-        db.close()
+        SessionLocal.remove()
 
 def read_events():
     db = SessionLocal()
@@ -122,7 +128,7 @@ def read_events():
             result.append(event_dict)
         return result
     finally:
-        db.close()
+        SessionLocal.remove()
 
 def write_events(data):
     db = SessionLocal()
@@ -135,7 +141,7 @@ def write_events(data):
             db.add(event)
         db.commit()
     finally:
-        db.close()
+        SessionLocal.remove()
 
 def read_tickets():
     db = SessionLocal()
@@ -148,7 +154,7 @@ def read_tickets():
             result.append(ticket_dict)
         return result
     finally:
-        db.close()
+        SessionLocal.remove()
 
 def write_tickets(data):
     db = SessionLocal()
@@ -161,7 +167,7 @@ def write_tickets(data):
             db.add(ticket)
         db.commit()
     finally:
-        db.close()
+        SessionLocal.remove()
 
 def read_received_qr_tokens():
     db = SessionLocal()
@@ -174,7 +180,7 @@ def read_received_qr_tokens():
             result.append(token_dict)
         return result
     finally:
-        db.close()
+        SessionLocal.remove()
 
 def write_received_qr_tokens(data):
     db = SessionLocal()
@@ -187,7 +193,7 @@ def write_received_qr_tokens(data):
             db.add(token)
         db.commit()
     finally:
-        db.close()
+        SessionLocal.remove()
 
 # Initialize database on import
 init_db()
