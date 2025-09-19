@@ -174,8 +174,8 @@ def write_received_qr_tokens(data):
         conn = get_db()
         cursor = conn.cursor()
         for item in data:
-            cursor.execute("INSERT OR REPLACE INTO received_qr_tokens VALUES (?, ?, ?)",
-                           (item['id'], item['token'], item['receivedAt']))
+            cursor.execute("INSERT OR REPLACE INTO received_qr_tokens VALUES (?, ?, ?, ?)",
+                           (item['id'], item['token'], item['receivedAt'], item.get('source')))
         conn.commit()
         conn.close()
 

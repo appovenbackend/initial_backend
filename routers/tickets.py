@@ -176,25 +176,30 @@ def receive_qr_token(token: str):
     """
     Receives QR token string from frontend and stores it in database.
     """
-    if not token:
-        raise HTTPException(status_code=400, detail="Token is required")
+    try:
+        if not token:
+            raise HTTPException(status_code=400, detail="Token is required")
 
-    # Create received QR token record
-    received_token_id = "rt_" + uuid4().hex[:10]
-    received_at = _now_ist_iso()
+        # Create received QR token record
+        received_token_id = "rt_" + uuid4().hex[:10]
+        received_at = _now_ist_iso()
 
-    new_received_token = {
-        "id": received_token_id,
-        "token": token,
-        "receivedAt": received_at
-    }
+        new_received_token = {
+            "id": received_token_id,
+            "token": token,
+            "receivedAt": received_at,
+            "source": None  # Add source field to match database schema
+        }
 
-    # Store in database
-    received_tokens = _load_received_qr_tokens()
-    received_tokens.append(new_received_token)
-    _save_received_qr_tokens(received_tokens)
+        # Store in database
+        received_tokens = _load_received_qr_tokens()
+        received_tokens.append(new_received_token)
+        _save_received_qr_tokens(received_tokens)
 
-    return {"received_token": token, "status": "stored", "id": received_token_id, "receivedAt": received_at}
+        return {"received_token": token, "status": "stored", "id": received_token_id, "receivedAt": received_at}
+    except Exception as e:
+        print(f"Error in receive_qr_token: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @router.get("/getAllQrTokens")
 def get_all_qr_tokens():
