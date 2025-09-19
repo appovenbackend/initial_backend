@@ -136,16 +136,13 @@ def update_event_price(event_id: str, new_price: int):
     _save_events(events)
     return {"message": "Event price updated successfully", "new_price": new_price}
 
-@router.put("/update/{event_id}")
-def update_event(event_id: str, event_data: dict):
+@router.patch("/{event_id}")
+def update_event_partial(event_id: str, event_updates: dict):
     """
-    Update an existing event with complete event data.
-    Returns a Ticket object as expected by the frontend.
+    Update an existing event with partial data.
+    Only provided fields will be updated, others remain unchanged.
+    Supports flexible updates for better frontend integration.
     """
-    # Validate that the event_id in path matches the id in the request body
-    if event_data.get("id") != event_id:
-        raise HTTPException(status_code=400, detail="Event ID mismatch between path and body")
-
     # Load existing events
     events = _load_events()
 
@@ -161,47 +158,103 @@ def update_event(event_id: str, event_data: dict):
     if existing_event is None:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    # Validate required fields
-    required_fields = ["title", "description", "city", "venue", "startAt", "endAt", "priceINR"]
-    for field in required_fields:
-        if field not in event_data or not event_data[field]:
-            raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+    # Create a copy of existing event to modify
+    updated_event = existing_event.copy()
 
-    # Validate dates
-    try:
-        start_dt = parser.isoparse(event_data["startAt"])
-        end_dt = parser.isoparse(event_data["endAt"])
-        if end_dt <= start_dt:
-            raise HTTPException(status_code=400, detail="End date must be after start date")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid date format")
+    # Validate and update only provided fields
+    validation_errors = []
 
-    # Validate price
-    if event_data["priceINR"] < 0:
-        raise HTTPException(status_code=400, detail="Price cannot be negative")
+    # Validate title if provided
+    if "title" in event_updates:
+        if not event_updates["title"] or not event_updates["title"].strip():
+            validation_errors.append("Title cannot be empty")
+        else:
+            updated_event["title"] = event_updates["title"].strip()
+
+    # Validate description if provided
+    if "description" in event_updates:
+        if not event_updates["description"] or not event_updates["description"].strip():
+            validation_errors.append("Description cannot be empty")
+        else:
+            updated_event["description"] = event_updates["description"].strip()
+
+    # Validate city if provided
+    if "city" in event_updates:
+        if not event_updates["city"] or not event_updates["city"].strip():
+            validation_errors.append("City cannot be empty")
+        else:
+            updated_event["city"] = event_updates["city"].strip()
+
+    # Validate venue if provided
+    if "venue" in event_updates:
+        if not event_updates["venue"] or not event_updates["venue"].strip():
+            validation_errors.append("Venue cannot be empty")
+        else:
+            updated_event["venue"] = event_updates["venue"].strip()
+
+    # Validate dates if provided
+    if "startAt" in event_updates or "endAt" in event_updates:
+        start_date = event_updates.get("startAt", updated_event["startAt"])
+        end_date = event_updates.get("endAt", updated_event["endAt"])
+
+        try:
+            start_dt = parser.isoparse(start_date)
+            end_dt = parser.isoparse(end_date)
+            if end_dt <= start_dt:
+                validation_errors.append("End date must be after start date")
+            else:
+                updated_event["startAt"] = start_date
+                updated_event["endAt"] = end_date
+        except Exception:
+            validation_errors.append("Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS)")
+
+    # Validate price if provided
+    if "priceINR" in event_updates:
+        try:
+            price = int(event_updates["priceINR"])
+            if price < 0:
+                validation_errors.append("Price cannot be negative")
+            else:
+                updated_event["priceINR"] = price
+        except (ValueError, TypeError):
+            validation_errors.append("Price must be a valid number")
+
+    # Validate bannerUrl if provided
+    if "bannerUrl" in event_updates:
+        # Allow empty bannerUrl (optional field)
+        updated_event["bannerUrl"] = event_updates["bannerUrl"]
+
+    # Validate isActive if provided
+    if "isActive" in event_updates:
+        try:
+            is_active = bool(event_updates["isActive"])
+            updated_event["isActive"] = is_active
+        except (ValueError, TypeError):
+            validation_errors.append("isActive must be a boolean value")
+
+    # Check for validation errors
+    if validation_errors:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Validation failed",
+                "errors": validation_errors
+            }
+        )
 
     # Preserve the original createdAt timestamp
-    event_data["createdAt"] = existing_event["createdAt"]
+    updated_event["createdAt"] = existing_event["createdAt"]
 
-    # Update the event
-    events[event_index] = event_data
+    # Update the event in the list
+    events[event_index] = updated_event
     _save_events(events)
 
-    # Create a sample ticket response as expected by frontend
-    # This is unusual for an update operation, but matches the frontend expectation
-    ticket_id = "t_" + uuid4().hex[:10]
-    qr_token = create_qr_token(ticket_id, "system", event_id, event_end_iso_ist=event_data["endAt"])
-
-    ticket_response = {
-        "id": ticket_id,
-        "eventId": event_id,
-        "userId": "system",  # System user for event updates
-        "qrPayload": qr_token,  # Frontend expects qrPayload, but model has qrToken
-        "qrToken": qr_token,
-        "createdAt": datetime.now(IST).isoformat()  # Frontend expects createdAt, but model has issuedAt
+    # Return the updated event
+    return {
+        "message": "Event updated successfully",
+        "event": Event(**updated_event),
+        "updated_fields": list(event_updates.keys())
     }
-
-    return ticket_response
 
 @router.put("/{event_id}/deactivate")
 def deactivate_event(event_id: str):
