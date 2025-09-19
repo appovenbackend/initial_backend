@@ -137,7 +137,23 @@ def write_events(data):
         db.query(EventDB).delete()
         # Add new events
         for event_data in data:
-            event = EventDB(**event_data)
+            # Filter only the fields that exist in EventDB model
+            filtered_data = {
+                'id': event_data.get('id'),
+                'title': event_data.get('title'),
+                'description': event_data.get('description'),
+                'city': event_data.get('city'),
+                'venue': event_data.get('venue'),
+                'startAt': event_data.get('startAt'),
+                'endAt': event_data.get('endAt'),
+                'priceINR': event_data.get('priceINR'),
+                'bannerUrl': event_data.get('bannerUrl'),
+                'isActive': event_data.get('isActive', True),
+                'createdAt': event_data.get('createdAt')
+            }
+            # Remove None values for required fields
+            filtered_data = {k: v for k, v in filtered_data.items() if v is not None}
+            event = EventDB(**filtered_data)
             db.add(event)
         db.commit()
     finally:
@@ -163,7 +179,21 @@ def write_tickets(data):
         db.query(TicketDB).delete()
         # Add new tickets
         for ticket_data in data:
-            ticket = TicketDB(**ticket_data)
+            # Filter only the fields that exist in TicketDB model
+            filtered_data = {
+                'id': ticket_data.get('id'),
+                'eventId': ticket_data.get('eventId'),
+                'userId': ticket_data.get('userId'),
+                'qrToken': ticket_data.get('qrToken'),
+                'issuedAt': ticket_data.get('issuedAt'),
+                'isValidated': ticket_data.get('isValidated', False),
+                'validatedAt': ticket_data.get('validatedAt'),
+                'validationHistory': ticket_data.get('validationHistory'),
+                'meta': ticket_data.get('meta')
+            }
+            # Remove None values for required fields
+            filtered_data = {k: v for k, v in filtered_data.items() if k in ['id', 'eventId', 'userId', 'qrToken', 'issuedAt'] or v is not None}
+            ticket = TicketDB(**filtered_data)
             db.add(ticket)
         db.commit()
     finally:
@@ -189,7 +219,16 @@ def write_received_qr_tokens(data):
         db.query(ReceivedQrTokenDB).delete()
         # Add new tokens
         for token_data in data:
-            token = ReceivedQrTokenDB(**token_data)
+            # Filter only the fields that exist in ReceivedQrTokenDB model
+            filtered_data = {
+                'id': token_data.get('id'),
+                'token': token_data.get('token'),
+                'receivedAt': token_data.get('receivedAt'),
+                'source': token_data.get('source')
+            }
+            # Remove None values for required fields
+            filtered_data = {k: v for k, v in filtered_data.items() if k in ['id', 'token', 'receivedAt'] or v is not None}
+            token = ReceivedQrTokenDB(**filtered_data)
             db.add(token)
         db.commit()
     finally:
