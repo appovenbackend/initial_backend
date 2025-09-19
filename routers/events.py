@@ -4,8 +4,10 @@ from datetime import datetime
 from dateutil import parser
 from models.event import CreateEventIn, Event
 from models.user import User
+from models.ticket import Ticket
 from utils.filedb import read_events, write_events, read_tickets, read_users
 from core.config import IST
+from services.qr_service import create_qr_token
 from typing import List
 
 router = APIRouter(prefix="/events", tags=["Events"])
@@ -133,6 +135,69 @@ def update_event_price(event_id: str, new_price: int):
     e["priceINR"] = new_price
     _save_events(events)
     return {"message": "Event price updated successfully", "new_price": new_price}
+
+@router.put("/update/{event_id}")
+def update_event(event_id: str, event_data: Event):
+    """
+    Update an existing event with complete event data.
+    Returns a Ticket object as expected by the frontend.
+    """
+    # Validate that the event_id in path matches the id in the request body
+    if event_data.id != event_id:
+        raise HTTPException(status_code=400, detail="Event ID mismatch between path and body")
+
+    # Load existing events
+    events = _load_events()
+
+    # Find the event to update
+    event_index = None
+    existing_event = None
+    for i, e in enumerate(events):
+        if e["id"] == event_id:
+            event_index = i
+            existing_event = e
+            break
+
+    if existing_event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    # Validate required fields
+    if not event_data.title or not event_data.description or not event_data.city or not event_data.venue:
+        raise HTTPException(status_code=400, detail="Missing required fields")
+
+    # Validate dates
+    try:
+        start_dt = parser.isoparse(event_data.startAt)
+        end_dt = parser.isoparse(event_data.endAt)
+        if end_dt <= start_dt:
+            raise HTTPException(status_code=400, detail="End date must be after start date")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid date format")
+
+    # Validate price
+    if event_data.priceINR < 0:
+        raise HTTPException(status_code=400, detail="Price cannot be negative")
+
+    # Update the event
+    updated_event = event_data.dict()
+    events[event_index] = updated_event
+    _save_events(events)
+
+    # Create a sample ticket response as expected by frontend
+    # This is unusual for an update operation, but matches the frontend expectation
+    ticket_id = "t_" + uuid4().hex[:10]
+    qr_token = create_qr_token(ticket_id, "system", event_id, event_end_iso_ist=event_data.endAt)
+
+    ticket_response = {
+        "id": ticket_id,
+        "eventId": event_id,
+        "userId": "system",  # System user for event updates
+        "qrPayload": qr_token,  # Frontend expects qrPayload, but model has qrToken
+        "qrToken": qr_token,
+        "createdAt": datetime.now(IST).isoformat()  # Frontend expects createdAt, but model has issuedAt
+    }
+
+    return ticket_response
 
 @router.put("/{event_id}/deactivate")
 def deactivate_event(event_id: str):

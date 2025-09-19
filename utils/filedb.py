@@ -71,6 +71,14 @@ def init_db():
                 FOREIGN KEY (userId) REFERENCES users (id)
             )
         ''')
+        # Received QR Tokens table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS received_qr_tokens (
+                id TEXT PRIMARY KEY,
+                token TEXT,
+                receivedAt TEXT
+            )
+        ''')
         conn.commit()
         conn.close()
 
@@ -152,6 +160,25 @@ def write_tickets(data):
         conn.commit()
         conn.close()
 
+def read_received_qr_tokens():
+    with lock:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM received_qr_tokens")
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(zip(['id', 'token', 'receivedAt'], row)) for row in rows]
+
+def write_received_qr_tokens(data):
+    with lock:
+        conn = get_db()
+        cursor = conn.cursor()
+        for item in data:
+            cursor.execute("INSERT OR REPLACE INTO received_qr_tokens VALUES (?, ?, ?)",
+                           (item['id'], item['token'], item['receivedAt']))
+        conn.commit()
+        conn.close()
+
 # For backward compatibility, but we'll update routers
 def read_json(path):
     if "users" in path:
@@ -160,6 +187,8 @@ def read_json(path):
         return read_events()
     elif "tickets" in path:
         return read_tickets()
+    elif "received_qr_tokens" in path:
+        return read_received_qr_tokens()
     return []
 
 def write_json(path, data):
@@ -169,3 +198,5 @@ def write_json(path, data):
         write_events(data)
     elif "tickets" in path:
         write_tickets(data)
+    elif "received_qr_tokens" in path:
+        write_received_qr_tokens(data)

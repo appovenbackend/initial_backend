@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from uuid import uuid4
 from datetime import datetime
 from dateutil import parser
-from utils.filedb import read_users, write_users, read_events, write_events, read_tickets, write_tickets
+from utils.filedb import read_users, write_users, read_events, write_events, read_tickets, write_tickets, read_received_qr_tokens, write_received_qr_tokens
 from core.config import IST
 from services.payment_service import create_order
 from services.qr_service import create_qr_token, generate_qr_image
@@ -28,6 +28,12 @@ def _load_tickets():
 
 def _save_tickets(data):
     write_tickets(data)
+
+def _load_received_qr_tokens():
+    return read_received_qr_tokens()
+
+def _save_received_qr_tokens(data):
+    write_received_qr_tokens(data)
 
 def _now_ist_iso():
     return datetime.now(IST).isoformat()
@@ -168,9 +174,35 @@ def get_ticket(ticket_id: str):
 @router.post("/receiveQrToken")
 def receive_qr_token(token: str):
     """
-    Receives QR token string from frontend.
+    Receives QR token string from frontend and stores it in database.
     """
-    return {"received_token": token, "status": "received"}
+    if not token:
+        raise HTTPException(status_code=400, detail="Token is required")
+
+    # Create received QR token record
+    received_token_id = "rt_" + uuid4().hex[:10]
+    received_at = _now_ist_iso()
+
+    new_received_token = {
+        "id": received_token_id,
+        "token": token,
+        "receivedAt": received_at
+    }
+
+    # Store in database
+    received_tokens = _load_received_qr_tokens()
+    received_tokens.append(new_received_token)
+    _save_received_qr_tokens(received_tokens)
+
+    return {"received_token": token, "status": "stored", "id": received_token_id, "receivedAt": received_at}
+
+@router.get("/getAllQrTokens")
+def get_all_qr_tokens():
+    """
+    Retrieves all saved QR tokens from the database.
+    """
+    received_tokens = _load_received_qr_tokens()
+    return {"qr_tokens": received_tokens, "count": len(received_tokens)}
 
 @router.post("/validate")
 def validate_token(body: dict):
