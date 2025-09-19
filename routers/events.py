@@ -137,13 +137,13 @@ def update_event_price(event_id: str, new_price: int):
     return {"message": "Event price updated successfully", "new_price": new_price}
 
 @router.put("/update/{event_id}")
-def update_event(event_id: str, event_data: Event):
+def update_event(event_id: str, event_data: dict):
     """
     Update an existing event with complete event data.
     Returns a Ticket object as expected by the frontend.
     """
     # Validate that the event_id in path matches the id in the request body
-    if event_data.id != event_id:
+    if event_data.get("id") != event_id:
         raise HTTPException(status_code=400, detail="Event ID mismatch between path and body")
 
     # Load existing events
@@ -162,31 +162,35 @@ def update_event(event_id: str, event_data: Event):
         raise HTTPException(status_code=404, detail="Event not found")
 
     # Validate required fields
-    if not event_data.title or not event_data.description or not event_data.city or not event_data.venue:
-        raise HTTPException(status_code=400, detail="Missing required fields")
+    required_fields = ["title", "description", "city", "venue", "startAt", "endAt", "priceINR"]
+    for field in required_fields:
+        if field not in event_data or not event_data[field]:
+            raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
 
     # Validate dates
     try:
-        start_dt = parser.isoparse(event_data.startAt)
-        end_dt = parser.isoparse(event_data.endAt)
+        start_dt = parser.isoparse(event_data["startAt"])
+        end_dt = parser.isoparse(event_data["endAt"])
         if end_dt <= start_dt:
             raise HTTPException(status_code=400, detail="End date must be after start date")
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid date format")
 
     # Validate price
-    if event_data.priceINR < 0:
+    if event_data["priceINR"] < 0:
         raise HTTPException(status_code=400, detail="Price cannot be negative")
 
+    # Preserve the original createdAt timestamp
+    event_data["createdAt"] = existing_event["createdAt"]
+
     # Update the event
-    updated_event = event_data.dict()
-    events[event_index] = updated_event
+    events[event_index] = event_data
     _save_events(events)
 
     # Create a sample ticket response as expected by frontend
     # This is unusual for an update operation, but matches the frontend expectation
     ticket_id = "t_" + uuid4().hex[:10]
-    qr_token = create_qr_token(ticket_id, "system", event_id, event_end_iso_ist=event_data.endAt)
+    qr_token = create_qr_token(ticket_id, "system", event_id, event_end_iso_ist=event_data["endAt"])
 
     ticket_response = {
         "id": ticket_id,
