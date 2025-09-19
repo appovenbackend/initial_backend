@@ -13,6 +13,14 @@ os.makedirs(DATA_DIR, exist_ok=True)
 DATABASE_URL = os.getenv("DATABASE_URL")  # Railway PostgreSQL
 DATABASE_FILE = os.path.join(DATA_DIR, "app.db")  # Local SQLite fallback
 
+# Fix postgres scheme and add sslmode=require if missing (Railway compatibility)
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+
+# If deploying on Railway Postgres, enforce sslmode
+if DATABASE_URL and "sslmode" not in DATABASE_URL:
+    DATABASE_URL += "?sslmode=require"
+
 # Use PostgreSQL if DATABASE_URL is provided (Railway), otherwise use SQLite
 USE_POSTGRESQL = bool(DATABASE_URL)
 
