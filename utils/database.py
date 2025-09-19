@@ -7,16 +7,17 @@ from core.config import DATABASE_URL, DATABASE_FILE, USE_POSTGRESQL, IST
 
 # Create SQLAlchemy engine
 if USE_POSTGRESQL and DATABASE_URL:
-    # Railway PostgreSQL with pg8000 (Python 3.13 compatible)
-    # Forcefully use pg8000 driver with proper SSL configuration
-    db_url = DATABASE_URL.replace('postgresql://', 'postgresql+pg8000://')
+    # Railway PostgreSQL with psycopg2
+    db_url = DATABASE_URL
+    # Convert Railway's postgres:// to postgresql+psycopg2://
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+
     engine = create_engine(
         db_url,
         pool_pre_ping=True,
-        connect_args={
-            "ssl_context": True,  # Enable SSL for pg8000
-            "autocommit": True
-        }
+        pool_recycle=300,  # Recycle connections every 5 minutes
+        echo=False  # Set to True for debugging
     )
 else:
     # Local SQLite
