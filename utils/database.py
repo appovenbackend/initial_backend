@@ -10,8 +10,8 @@ from core.config import DATABASE_URL, DATABASE_FILE, USE_POSTGRESQL, IST
 
 # Create SQLAlchemy engine
 if USE_POSTGRESQL and DATABASE_URL:
-    # Railway PostgreSQL with psycopg2
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+    # Railway PostgreSQL with pg8000 (Python 3.13 compatible)
+    engine = create_engine(DATABASE_URL.replace('postgresql://', 'postgresql+pg8000://'), pool_pre_ping=True)
 else:
     # Local SQLite
     engine = create_engine(f"sqlite:///{DATABASE_FILE}", connect_args={"check_same_thread": False})
