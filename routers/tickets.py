@@ -169,7 +169,17 @@ def get_ticket(ticket_id: str):
     t = next((x for x in tickets if x["id"] == ticket_id), None)
     if not t:
         raise HTTPException(status_code=404, detail="Ticket not found")
-    return t
+
+    # Fetch event details
+    events = _load_events()
+    event = next((e for e in events if e["id"] == t["eventId"]), None)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    # Return ticket with event details
+    response = t.copy()
+    response["event"] = event
+    return response
 
 @router.post("/receiveQrToken")
 def receive_qr_token(token: str):

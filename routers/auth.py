@@ -3,7 +3,7 @@ from uuid import uuid4
 from datetime import datetime, timedelta
 from utils.database import read_users, write_users
 from core.config import IST, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SECRET_KEY, ALGORITHM
-from models.user import UserIn, User
+from models.user import UserIn, User, UserUpdate
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 import os
@@ -86,6 +86,32 @@ def get_user_by_phone(phone: str):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
+
+@router.put("/user/{user_id}")
+def update_user(user_id: str, user_update: UserUpdate):
+    users = _load_users()
+    user = next((u for u in users if u["id"] == user_id), None)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Update only provided fields
+    updated = False
+    if user_update.phone is not None:
+        user["phone"] = user_update.phone
+        updated = True
+    if user_update.email is not None:
+        user["email"] = user_update.email
+        updated = True
+    if user_update.picture is not None:
+        user["picture"] = user_update.picture
+        updated = True
+
+    if not updated:
+        raise HTTPException(status_code=400, detail="No fields provided for update")
+
+    # Save updated users
+    _save_users(users)
+    return {"msg": "User updated successfully", "user": user}
 
 # Google OAuth routes
 @router.get("/google_login")
