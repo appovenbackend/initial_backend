@@ -66,3 +66,17 @@ If users lose authentication after redeployment:
 
 ### Database Migration
 If switching from SQLite to PostgreSQL, existing data will need to be migrated manually or users will need to re-register.
+
+#### Adding New Columns to Existing Tables
+When adding new columns to existing database tables (like organizer fields to events), run the migration script:
+
+```bash
+python migrate_db.py
+```
+
+This script will:
+- Check if the new columns already exist
+- Add missing columns with appropriate defaults
+- Preserve existing data
+
+**Important**: Always run migrations after deploying code that adds new database columns.
