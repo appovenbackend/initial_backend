@@ -24,6 +24,15 @@ if DATABASE_URL and "sslmode" not in DATABASE_URL:
 # Use PostgreSQL if DATABASE_URL is provided (Railway), otherwise use SQLite
 USE_POSTGRESQL = bool(DATABASE_URL)
 
+# CRITICAL: Warn if using SQLite in production (DATABASE_URL should be set)
+if not USE_POSTGRESQL:
+    print("⚠️  WARNING: Using SQLite database! This will NOT persist data across deployments.")
+    print("   Make sure DATABASE_URL environment variable is set in your production environment.")
+    print("   Railway automatically provides DATABASE_URL for PostgreSQL databases.")
+    print(f"   Current DATABASE_FILE: {DATABASE_FILE}")
+else:
+    print("✅ Using PostgreSQL database for production persistence.")
+
 # Debug logging for database configuration
 print("=== DATABASE CONFIGURATION ===")
 print(f"DATABASE_URL present: {bool(DATABASE_URL)}")
@@ -41,6 +50,13 @@ IST = timezone(timedelta(hours=5, minutes=30))
 SECRET_KEY = os.getenv("JWT_SECRET", "supersecretkey123")   # change for prod
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 120
+
+# CRITICAL: Warn if using default JWT secret (will break user sessions on redeploy)
+if SECRET_KEY == "supersecretkey123":
+    print("⚠️  WARNING: Using default JWT_SECRET! User sessions will be lost on redeployment.")
+    print("   Set JWT_SECRET environment variable in your Railway deployment to persist user sessions.")
+else:
+    print("✅ JWT_SECRET is configured for persistent user sessions.")
 
 # GOOGLE OAUTH
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")

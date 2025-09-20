@@ -330,4 +330,13 @@ def write_received_qr_tokens(data):
         SessionLocal.remove()
 
 # Initialize database on import
-init_db()
+try:
+    init_db()
+    print("✅ Database initialized successfully")
+except Exception as e:
+    print(f"❌ Database initialization failed: {e}")
+    if USE_POSTGRESQL:
+        print("   Check your DATABASE_URL configuration and PostgreSQL connection")
+    else:
+        print("   Check file permissions for SQLite database")
+    raise
