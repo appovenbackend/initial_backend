@@ -118,7 +118,9 @@ def write_users(data):
         db.query(UserDB).delete()
         # Add new users
         for user_data in data:
-            user = UserDB(**user_data)
+            # Filter to only include fields that exist in UserDB
+            user_dict = {k: v for k, v in user_data.items() if k in UserDB.__table__.columns.keys()}
+            user = UserDB(**user_dict)
             db.add(user)
         db.commit()
     finally:

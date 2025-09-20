@@ -42,44 +42,47 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 
 @router.post("/login")
 def login(user_in: UserIn):
-    users = _load_users()
+    try:
+        users = _load_users()
 
-    # Check if user already exists with this phone number
-    existing_user = next((u for u in users if u["phone"] == user_in.phone), None)
+        # Check if user already exists with this phone number
+        existing_user = next((u for u in users if u["phone"] == user_in.phone), None)
 
-    if existing_user:
-        # User exists, return existing user info
-        access_token = create_access_token(data={"sub": existing_user["id"]})
+        if existing_user:
+            # User exists, return existing user info
+            access_token = create_access_token(data={"sub": existing_user["id"]})
+            return {
+                "msg": "login_successful",
+                "userId": existing_user["id"],
+                "name": existing_user["name"],
+                "phone": existing_user["phone"],
+                "createdAt": existing_user["createdAt"],
+                "access_token": access_token,
+                "token_type": "bearer"
+            }
+
+        # User doesn't exist, create new user
+        new_user = User(
+            id="u_" + uuid4().hex[:10],
+            name=user_in.name,
+            phone=user_in.phone,
+            role="user",
+            createdAt=datetime.now(IST).isoformat()
+        ).dict()
+        users.append(new_user)
+        _save_users(users)
+        access_token = create_access_token(data={"sub": new_user["id"]})
         return {
-            "msg": "login_successful",
-            "userId": existing_user["id"],
-            "name": existing_user["name"],
-            "phone": existing_user["phone"],
-            "createdAt": existing_user["createdAt"],
+            "msg": "registered",
+            "userId": new_user["id"],
+            "name": new_user["name"],
+            "phone": new_user["phone"],
+            "createdAt": new_user["createdAt"],
             "access_token": access_token,
             "token_type": "bearer"
         }
-
-    # User doesn't exist, create new user
-    new_user = User(
-        id="u_" + uuid4().hex[:10],
-        name=user_in.name,
-        phone=user_in.phone,
-        role="user",
-        createdAt=datetime.now(IST).isoformat()
-    ).dict()
-    users.append(new_user)
-    _save_users(users)
-    access_token = create_access_token(data={"sub": new_user["id"]})
-    return {
-        "msg": "registered",
-        "userId": new_user["id"],
-        "name": new_user["name"],
-        "phone": new_user["phone"],
-        "createdAt": new_user["createdAt"],
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 @router.get("/user/{phone}")
 def get_user_by_phone(phone: str):
@@ -145,55 +148,58 @@ async def google_login(request: Request):
 
 @router.get("/google_login/callback")
 async def google_callback(request: Request):
-    token = await oauth.google.authorize_access_token(request)
-    user_info = token.get("userinfo")
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        user_info = token.get("userinfo")
 
-    if not user_info:
-        raise HTTPException(status_code=400, detail="Google login failed")
+        if not user_info:
+            raise HTTPException(status_code=400, detail="Google login failed")
 
-    users = _load_users()
-    # Check if user exists by email
-    existing_user = next((u for u in users if u.get("email") == user_info["email"]), None)
+        users = _load_users()
+        # Check if user exists by email
+        existing_user = next((u for u in users if u.get("email") == user_info["email"]), None)
 
-    if existing_user:
-        # User exists, return existing user info
-        access_token = create_access_token(data={"sub": existing_user["id"]})
+        if existing_user:
+            # User exists, return existing user info
+            access_token = create_access_token(data={"sub": existing_user["id"]})
+            return {
+                "msg": "login_successful",
+                "user": {
+                    "id": existing_user["id"],
+                    "name": existing_user["name"],
+                    "email": existing_user.get("email"),
+                    "picture": existing_user.get("picture"),
+                    "phone": existing_user.get("phone"),
+                    "createdAt": existing_user["createdAt"]
+                },
+                "access_token": access_token,
+                "token_type": "bearer"
+            }
+
+        # User doesn't exist, create new user
+        new_user = User(
+            id="u_" + uuid4().hex[:10],
+            name=user_info.get("name"),
+            email=user_info["email"],
+            picture=user_info.get("picture"),
+            google_id=user_info.get("sub"),
+            role="user",
+            createdAt=datetime.now(IST).isoformat()
+        ).dict()
+        users.append(new_user)
+        _save_users(users)
+        access_token = create_access_token(data={"sub": new_user["id"]})
         return {
-            "msg": "login_successful",
+            "msg": "registered",
             "user": {
-                "id": existing_user["id"],
-                "name": existing_user["name"],
-                "email": existing_user.get("email"),
-                "picture": existing_user.get("picture"),
-                "phone": existing_user.get("phone"),
-                "createdAt": existing_user["createdAt"]
+                "id": new_user["id"],
+                "name": new_user["name"],
+                "email": new_user["email"],
+                "picture": new_user["picture"],
+                "createdAt": new_user["createdAt"]
             },
             "access_token": access_token,
             "token_type": "bearer"
         }
-
-    # User doesn't exist, create new user
-    new_user = User(
-        id="u_" + uuid4().hex[:10],
-        name=user_info.get("name"),
-        email=user_info["email"],
-        picture=user_info.get("picture"),
-        google_id=user_info.get("sub"),
-        role="user",
-        createdAt=datetime.now(IST).isoformat()
-    ).dict()
-    users.append(new_user)
-    _save_users(users)
-    access_token = create_access_token(data={"sub": new_user["id"]})
-    return {
-        "msg": "registered",
-        "user": {
-            "id": new_user["id"],
-            "name": new_user["name"],
-            "email": new_user["email"],
-            "picture": new_user["picture"],
-            "createdAt": new_user["createdAt"]
-        },
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Google login failed: {str(e)}")
