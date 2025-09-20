@@ -36,6 +36,9 @@ app.include_router(auth.router)
 app.include_router(events.router)
 app.include_router(tickets.router)
 
+# Ensure uploads directory exists
+os.makedirs("uploads", exist_ok=True)
+
 # Mount static files for uploaded images
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
