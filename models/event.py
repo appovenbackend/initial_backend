@@ -11,6 +11,8 @@ class CreateEventIn(BaseModel):
     priceINR: int
     bannerUrl: Optional[str] = None
     isActive: Optional[bool] = True
+    organizerName: Optional[str] = "bhag"
+    organizerLogo: Optional[str] = "https://example.com/default-logo.png"
 
 class Event(BaseModel):
     id: str
@@ -24,3 +26,5 @@ class Event(BaseModel):
     bannerUrl: Optional[str] = None
     isActive: bool = True
     createdAt: str
+    organizerName: Optional[str] = "bhag"
+    organizerLogo: Optional[str] = "https://example.com/default-logo.png"

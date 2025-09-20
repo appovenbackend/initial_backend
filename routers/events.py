@@ -57,7 +57,9 @@ def create_event(ev: CreateEventIn):
         priceINR=ev.priceINR,
         bannerUrl=ev.bannerUrl,
         isActive=ev.isActive if ev.isActive is not None else True,
-        createdAt=datetime.now(IST).isoformat()
+        createdAt=datetime.now(IST).isoformat(),
+        organizerName=ev.organizerName,
+        organizerLogo=ev.organizerLogo
     ).dict()
     events.append(new_ev)
     _save_events(events)
@@ -231,6 +233,22 @@ def update_event_partial(event_id: str, event_updates: dict):
             updated_event["isActive"] = is_active
         except (ValueError, TypeError):
             validation_errors.append("isActive must be a boolean value")
+
+    # Validate organizerName if provided
+    if "organizerName" in event_updates:
+        organizer_name = event_updates["organizerName"]
+        if organizer_name is not None and (not isinstance(organizer_name, str) or not organizer_name.strip()):
+            validation_errors.append("organizerName must be a non-empty string or null")
+        else:
+            updated_event["organizerName"] = organizer_name
+
+    # Validate organizerLogo if provided
+    if "organizerLogo" in event_updates:
+        organizer_logo = event_updates["organizerLogo"]
+        if organizer_logo is not None and (not isinstance(organizer_logo, str) or not organizer_logo.strip()):
+            validation_errors.append("organizerLogo must be a valid URL string or null")
+        else:
+            updated_event["organizerLogo"] = organizer_logo
 
     # Check for validation errors
     if validation_errors:

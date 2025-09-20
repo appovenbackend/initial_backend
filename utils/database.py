@@ -66,6 +66,8 @@ class EventDB(Base):
     bannerUrl = Column(String, nullable=True)
     isActive = Column(Boolean, default=True)
     createdAt = Column(String, nullable=False)
+    organizerName = Column(String, nullable=True, default="bhag")
+    organizerLogo = Column(String, nullable=True, default="https://example.com/default-logo.png")
 
 class TicketDB(Base):
     __tablename__ = "tickets"
@@ -217,7 +219,9 @@ def write_events(data):
                 'priceINR': event_data.get('priceINR'),
                 'bannerUrl': event_data.get('bannerUrl'),
                 'isActive': event_data.get('isActive', True),
-                'createdAt': event_data.get('createdAt')
+                'createdAt': event_data.get('createdAt'),
+                'organizerName': event_data.get('organizerName', 'bhag'),
+                'organizerLogo': event_data.get('organizerLogo', 'https://example.com/default-logo.png')
             }
             # Remove None values for required fields
             filtered_data = {k: v for k, v in filtered_data.items() if v is not None}
