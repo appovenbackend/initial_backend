@@ -1,8 +1,10 @@
 import os
 import json
+import time
 from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy.exc import OperationalError, DisconnectionError
 from datetime import datetime
 from core.config import DATABASE_URL, DATABASE_FILE, USE_POSTGRESQL, IST
 
@@ -16,13 +18,23 @@ if USE_POSTGRESQL and DATABASE_URL:
 
     engine = create_engine(
         db_url,
-        pool_pre_ping=True,
+        pool_pre_ping=True,  # Test connections before use
         pool_recycle=300,  # Recycle connections every 5 minutes
-        echo=False  # Set to True for debugging
+        pool_size=10,  # Connection pool size
+        max_overflow=20,  # Max overflow connections
+        echo=False,  # Set to True for debugging
+        connect_args={
+            "connect_timeout": 10,  # Connection timeout
+            "options": "-c statement_timeout=30000"  # 30 second statement timeout
+        }
     )
 else:
     # Local SQLite
-    engine = create_engine(f"sqlite:///{DATABASE_FILE}", connect_args={"check_same_thread": False})
+    engine = create_engine(
+        f"sqlite:///{DATABASE_FILE}",
+        connect_args={"check_same_thread": False},
+        pool_pre_ping=True
+    )
 
 SessionLocal = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=engine))
 Base = declarative_base()
@@ -79,6 +91,30 @@ class ReceivedQrTokenDB(Base):
 # Create tables
 Base.metadata.create_all(bind=engine)
 
+def retry_db_operation(max_retries=3, delay=1):
+    """Decorator to retry database operations on connection failures"""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except (OperationalError, DisconnectionError) as e:
+                    last_exception = e
+                    if attempt < max_retries - 1:
+                        time.sleep(delay * (2 ** attempt))  # Exponential backoff
+                        # Reset session on connection error
+                        SessionLocal.remove()
+                    else:
+                        raise e
+                except Exception as e:
+                    # For non-connection errors, don't retry
+                    raise e
+            if last_exception:
+                raise last_exception
+        return wrapper
+    return decorator
+
 # Dependency to get database session
 def get_db():
     db = SessionLocal()
@@ -97,6 +133,7 @@ def get_database_session():
     return SessionLocal()
 
 # Legacy compatibility functions
+@retry_db_operation()
 def read_users():
     db = SessionLocal()
     try:
@@ -106,22 +143,43 @@ def read_users():
             user_dict = user.__dict__.copy()
             # Remove SQLAlchemy internal fields
             user_dict.pop('_sa_instance_state', None)
+
+            # Deserialize subscribedEvents from JSON to list
+            if user_dict.get('subscribedEvents') is not None:
+                try:
+                    user_dict['subscribedEvents'] = json.loads(user_dict['subscribedEvents'])
+                except (json.JSONDecodeError, TypeError):
+                    user_dict['subscribedEvents'] = []
+            else:
+                user_dict['subscribedEvents'] = []
+
             result.append(user_dict)
         return result
     finally:
         SessionLocal.remove()
 
+@retry_db_operation()
 def write_users(data):
     db = SessionLocal()
     try:
-        # Clear existing users
-        db.query(UserDB).delete()
-        # Add new users
+        # Instead of deleting all, upsert each user to prevent data loss
         for user_data in data:
             # Filter to only include fields that exist in UserDB
             user_dict = {k: v for k, v in user_data.items() if k in UserDB.__table__.columns.keys()}
-            user = UserDB(**user_dict)
-            db.add(user)
+
+            # Serialize subscribedEvents to JSON if it's a list
+            if 'subscribedEvents' in user_dict and isinstance(user_dict['subscribedEvents'], list):
+                user_dict['subscribedEvents'] = json.dumps(user_dict['subscribedEvents'])
+
+            existing_user = db.query(UserDB).filter(UserDB.id == user_dict.get('id')).first()
+            if existing_user:
+                # Update existing user
+                for key, value in user_dict.items():
+                    setattr(existing_user, key, value)
+            else:
+                # Add new user
+                user = UserDB(**user_dict)
+                db.add(user)
         db.commit()
     finally:
         SessionLocal.remove()

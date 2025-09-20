@@ -84,6 +84,11 @@ def login(user_in: UserIn):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
+@router.get("/users")
+def get_all_users():
+    users = _load_users()
+    return {"users": users}
+
 @router.get("/user/{phone}")
 def get_user_by_phone(phone: str):
     users = _load_users()

@@ -50,18 +50,25 @@ def root():
 def health_check():
     """Health check endpoint to verify database connection and configuration"""
     try:
-        # Test database connection
+        # Test database connection with a simple query
         from sqlalchemy import text
         db = get_database_session()
-        result = db.execute(text("SELECT 1"))
+        result = db.execute(text("SELECT 1 as test"))
+        row = result.fetchone()
         db.close()
+
+        # Test user table exists and can be queried
+        from utils.database import read_users
+        users_count = len(read_users())
 
         return {
             "status": "healthy",
             "database": {
                 "type": "PostgreSQL" if USE_POSTGRESQL else "SQLite",
                 "postgresql_enabled": USE_POSTGRESQL,
-                "database_url_present": bool(DATABASE_URL)
+                "database_url_present": bool(DATABASE_URL),
+                "connection_test": "passed",
+                "users_count": users_count
             },
             "timestamp": datetime.now(IST).isoformat()
         }
@@ -72,7 +79,8 @@ def health_check():
             "database": {
                 "type": "PostgreSQL" if USE_POSTGRESQL else "SQLite",
                 "postgresql_enabled": USE_POSTGRESQL,
-                "database_url_present": bool(DATABASE_URL)
+                "database_url_present": bool(DATABASE_URL),
+                "connection_test": "failed"
             },
             "timestamp": datetime.now(IST).isoformat()
         }
