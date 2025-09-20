@@ -11,10 +11,23 @@ from datetime import datetime, timedelta
 import uvicorn
 
 def initialize_sample_data():
-    """Initialize database on app startup - no sample data added to persist existing data"""
+    """Initialize database on app startup - no sample data added to ensure persistence of existing data on deployment"""
     # Database tables are created in utils.filedb.init_db()
     # No sample data is added to ensure persistence of existing data on deployment
     pass
+
+# TEMPORARY: Run migration on startup (remove after migration completes)
+def run_migration():
+    """Run database migration to add organizer columns"""
+    try:
+        from migrate_db import migrate_events_table
+        print("🔄 Running database migration on startup...")
+        migrate_events_table()
+        print("✅ Migration completed successfully!")
+    except Exception as e:
+        print(f"❌ Migration failed: {e}")
+
+run_migration()
 
 # Initialize database on startup
 initialize_sample_data()
