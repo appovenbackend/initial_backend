@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from uuid import uuid4
 from datetime import datetime, timedelta
 from utils.database import read_users, write_users
@@ -7,6 +7,8 @@ from models.user import UserIn, User, UserUpdate
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 import os
+import shutil
+from pathlib import Path
 from jose import jwt
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -88,7 +90,12 @@ def get_user_by_phone(phone: str):
     return user
 
 @router.put("/user/{user_id}")
-def update_user(user_id: str, user_update: UserUpdate):
+async def update_user(
+    user_id: str,
+    phone: str = Form(None),
+    email: str = Form(None),
+    picture: UploadFile = File(None)
+):
     users = _load_users()
     user = next((u for u in users if u["id"] == user_id), None)
     if not user:
@@ -96,14 +103,31 @@ def update_user(user_id: str, user_update: UserUpdate):
 
     # Update only provided fields
     updated = False
-    if user_update.phone is not None:
-        user["phone"] = user_update.phone
+
+    if phone is not None and phone.strip():
+        user["phone"] = phone.strip()
         updated = True
-    if user_update.email is not None:
-        user["email"] = user_update.email
+
+    if email is not None and email.strip():
+        user["email"] = email.strip()
         updated = True
-    if user_update.picture is not None:
-        user["picture"] = user_update.picture
+
+    if picture is not None:
+        # Create uploads directory if it doesn't exist
+        upload_dir = Path("uploads/profiles")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate unique filename
+        file_extension = Path(picture.filename).suffix
+        unique_filename = f"{user_id}_{uuid4().hex[:8]}{file_extension}"
+        file_path = upload_dir / unique_filename
+
+        # Save the uploaded file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(picture.file, buffer)
+
+        # Store the relative path in user record
+        user["picture"] = f"/uploads/profiles/{unique_filename}"
         updated = True
 
     if not updated:

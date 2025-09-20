@@ -69,6 +69,12 @@ def register_free(payload: dict):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     userId = user["id"]
+
+    # Check if user has already subscribed to this event
+    subscribed_events = user.get("subscribedEvents", [])
+    if eventId in subscribed_events:
+        raise HTTPException(status_code=400, detail="User has already subscribed to this event")
+
     events = _load_events()
     ev = next((e for e in events if e["id"] == eventId), None)
     if not ev:
@@ -91,6 +97,19 @@ def register_free(payload: dict):
             all_events[i] = ev
             break
     _save_events(all_events)
+
+    # Add event to user's subscribed events
+    if "subscribedEvents" not in user:
+        user["subscribedEvents"] = []
+    user["subscribedEvents"].append(eventId)
+
+    # Update user record
+    all_users = _load_users()
+    for i, u in enumerate(all_users):
+        if u["id"] == userId:
+            all_users[i] = user
+            break
+    _save_users(all_users)
 
     # create ticket
     ticket_id = "t_" + uuid4().hex[:10]

@@ -1,6 +1,7 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from routers import auth, events, tickets
 from core.config import SECRET_KEY, IST
@@ -34,6 +35,9 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 app.include_router(auth.router)
 app.include_router(events.router)
 app.include_router(tickets.router)
+
+# Mount static files for uploaded images
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 @app.get("/")
 def root():

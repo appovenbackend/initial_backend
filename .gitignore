@@ -97,5 +97,7 @@ data/qrs/
 *.sqlite3
 data/app.db
 data/*.db
+# Uploaded files
+uploads/
 # Logs
 *.log

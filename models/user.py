@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 class UserIn(BaseModel):
     name: str
@@ -18,4 +18,5 @@ class User(BaseModel):
     picture: Optional[str] = None
     google_id: Optional[str] = None
     role: str = "user"
+    subscribedEvents: List[str] = []
     createdAt: str
