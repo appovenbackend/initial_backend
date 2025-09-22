@@ -6,9 +6,11 @@ class UserIn(BaseModel):
     phone: str
 
 class UserUpdate(BaseModel):
+    name: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
     picture: Optional[str] = None
+    
 
 class User(BaseModel):
     id: str

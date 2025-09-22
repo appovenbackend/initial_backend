@@ -100,6 +100,7 @@ async def get_user_by_phone(phone: str):
 @router.put("/user/{user_id}")
 async def update_user(
     user_id: str,
+    name: str = Form(None),
     phone: str = Form(None),
     email: str = Form(None),
     picture: UploadFile = File(None)
@@ -111,6 +112,10 @@ async def update_user(
 
     # Update only provided fields
     updated = False
+
+    if name is not None and name.strip():
+        user["name"] = name.strip()
+        updated = True
 
     if phone is not None and phone.strip():
         user["phone"] = phone.strip()
