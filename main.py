@@ -20,9 +20,10 @@ def initialize_sample_data():
 def run_migration():
     """Run database migration to add organizer columns"""
     try:
-        from migrate_db import migrate_events_table
+from migrate_db import migrate_events_table, migrate_received_qr_tokens_table
         print("🔄 Running database migration on startup...")
         migrate_events_table()
+        migrate_received_qr_tokens_table()
         print("✅ Migration completed successfully!")
     except Exception as e:
         print(f"❌ Migration failed: {e}")

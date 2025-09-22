@@ -70,5 +70,62 @@ def migrate_events_table():
         print(f"❌ Migration failed: {e}")
         raise
 
+def migrate_received_qr_tokens_table():
+    """Ensure received_qr_tokens has eventId, receivedAt, source columns (PostgreSQL)."""
+    if not USE_POSTGRESQL:
+        print("⚠️  Migration only needed for PostgreSQL. Skipping for SQLite.")
+        return
+
+    if not DATABASE_URL:
+        print("❌ No DATABASE_URL found. Cannot run migration.")
+        return
+
+    print("🔄 Starting received_qr_tokens migration...")
+    engine = create_engine(DATABASE_URL)
+    try:
+        with engine.connect() as conn:
+            # Check existing columns
+            result = conn.execute(text(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'received_qr_tokens'
+                """
+            ))
+            existing_columns = {row[0] for row in result.fetchall()}
+
+            # Add eventId
+            if 'eventId' not in existing_columns:
+                print("📝 Adding eventId to received_qr_tokens...")
+                conn.execute(text('ALTER TABLE received_qr_tokens ADD COLUMN "eventId" VARCHAR'))
+                conn.commit()
+                print("✅ Added eventId")
+            else:
+                print("ℹ️  eventId already exists")
+
+            # Add receivedAt
+            if 'receivedAt' not in existing_columns:
+                print("📝 Adding receivedAt to received_qr_tokens...")
+                conn.execute(text('ALTER TABLE received_qr_tokens ADD COLUMN "receivedAt" VARCHAR'))
+                conn.commit()
+                print("✅ Added receivedAt")
+            else:
+                print("ℹ️  receivedAt already exists")
+
+            # Add source
+            if 'source' not in existing_columns:
+                print("📝 Adding source to received_qr_tokens...")
+                conn.execute(text('ALTER TABLE received_qr_tokens ADD COLUMN source VARCHAR'))
+                conn.commit()
+                print("✅ Added source")
+            else:
+                print("ℹ️  source already exists")
+
+        print("🎉 received_qr_tokens migration completed!")
+    except Exception as e:
+        print(f"❌ Migration failed: {e}")
+        raise
+
 if __name__ == "__main__":
     migrate_events_table()
+    migrate_received_qr_tokens_table()
