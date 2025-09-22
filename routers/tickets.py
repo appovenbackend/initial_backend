@@ -250,14 +250,15 @@ async def get_qr_tokens_by_event(event_id: str):
 @router.post("/validate")
 async def validate_token(body: dict):
     """
-    Expects: { "token": "<jwt>", "device": "gate-1", "operator":"op-1" }
+    Expects: { "token": "<jwt>", "eventId": "<event_id>", "device": "gate-1", "operator":"op-1" }
     Returns user + event info on first scan, or already_scanned on second.
     """
     token = body.get("token")
+    eventId = body.get("eventId")
     device = body.get("device")
     operator = body.get("operator")
-    if not token:
-        raise HTTPException(status_code=400, detail="token required")
+    if not token or not eventId:
+        raise HTTPException(status_code=400, detail="token and eventId required")
     # decode token safely using jose
     from jose import jwt, JWTError, ExpiredSignatureError
     from core.config import SECRET_KEY, ALGORITHM
@@ -272,6 +273,10 @@ async def validate_token(body: dict):
     ticket_id = decoded.get("ticket_id")
     user_id = decoded.get("user_id")
     event_id = decoded.get("event_id")
+
+    # Check if token's event_id matches provided eventId
+    if event_id != eventId:
+        return {"status": "invalid", "reason": "event_mismatch"}
 
     tickets = _load_tickets()
     ticket = next((t for t in tickets if t["id"] == ticket_id), None)
