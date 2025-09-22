@@ -87,6 +87,7 @@ class ReceivedQrTokenDB(Base):
 
     id = Column(String, primary_key=True, index=True)
     token = Column(String, nullable=False)
+    eventId = Column(String, nullable=False)
     receivedAt = Column(String, nullable=False)
     source = Column(String, nullable=True)
 
@@ -322,11 +323,12 @@ def write_received_qr_tokens(data):
             filtered_data = {
                 'id': token_data.get('id'),
                 'token': token_data.get('token'),
+                'eventId': token_data.get('eventId'),
                 'receivedAt': token_data.get('receivedAt'),
                 'source': token_data.get('source')
             }
             # Remove None values for required fields
-            filtered_data = {k: v for k, v in filtered_data.items() if k in ['id', 'token', 'receivedAt'] or v is not None}
+            filtered_data = {k: v for k, v in filtered_data.items() if k in ['id', 'token', 'eventId', 'receivedAt'] or v is not None}
             token = ReceivedQrTokenDB(**filtered_data)
             db.add(token)
         db.commit()

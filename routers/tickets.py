@@ -57,7 +57,7 @@ async def api_create_order(phone: str, eventId: str):
     order = create_order(eventId, ev["priceINR"])
     return order
 
-@router.post("/register/free", response_model=Ticket)
+@router.post("/register/", response_model=Ticket)
 async def register_free(payload: dict):
     """
     payload: { "phone": "...", "eventId": "..." }
@@ -201,7 +201,7 @@ async def get_ticket(ticket_id: str):
     return response
 
 @router.post("/receiveQrToken")
-async def receive_qr_token(token: str):
+async def receive_qr_token(token: str, eventId: str):
     """
     Receives QR token string from frontend and stores it in database.
     """
@@ -216,6 +216,7 @@ async def receive_qr_token(token: str):
         new_received_token = {
             "id": received_token_id,
             "token": token,
+            "eventId": eventId,
             "receivedAt": received_at
         }
 
@@ -224,7 +225,7 @@ async def receive_qr_token(token: str):
         received_tokens.append(new_received_token)
         _save_received_qr_tokens(received_tokens)
 
-        return {"received_token": token, "status": "stored", "id": received_token_id, "receivedAt": received_at}
+        return {"received_token": token, "status": "stored", "id": received_token_id, "receivedAt": received_at, "eventId" : eventId}
     except Exception as e:
         print(f"Error in receive_qr_token: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
@@ -236,6 +237,15 @@ async def get_all_qr_tokens():
     """
     received_tokens = _load_received_qr_tokens()
     return {"qr_tokens": received_tokens, "count": len(received_tokens)}
+
+@router.get("/getQrTokensByEvent/{event_id}")
+async def get_qr_tokens_by_event(event_id: str):
+    """
+    Retrieves QR tokens for a specific event.
+    """
+    received_tokens = _load_received_qr_tokens()
+    event_tokens = [t for t in received_tokens if t.get("eventId") == event_id]
+    return {"qr_tokens": event_tokens, "count": len(event_tokens)}
 
 @router.post("/validate")
 async def validate_token(body: dict):
