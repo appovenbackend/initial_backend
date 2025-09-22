@@ -45,7 +45,7 @@ def _to_ist(dt_iso: str):
     return dt.astimezone(IST)
 
 @router.post("/create-order")
-def api_create_order(phone: str, eventId: str):
+async def api_create_order(phone: str, eventId: str):
     users = _load_users()
     user = next((u for u in users if u["phone"] == phone), None)
     if not user:
@@ -58,7 +58,7 @@ def api_create_order(phone: str, eventId: str):
     return order
 
 @router.post("/register/free", response_model=Ticket)
-def register_free(payload: dict):
+async def register_free(payload: dict):
     """
     payload: { "phone": "...", "eventId": "..." }
     """
@@ -136,7 +136,7 @@ def register_free(payload: dict):
     return new_ticket
 
 @router.post("/register/paid", response_model=Ticket)
-def register_paid(payload: dict):
+async def register_paid(payload: dict):
     """
     payload: { "phone": "...", "eventId": "...", "orderId": "..." }
     This simulates post-payment confirmation.
@@ -178,12 +178,12 @@ def register_paid(payload: dict):
     return new_ticket
 
 @router.get("/tickets/{user_id}")
-def get_tickets_for_user(user_id: str):
+async def get_tickets_for_user(user_id: str):
     tickets = _load_tickets()
     return [t for t in tickets if t["userId"] == user_id]
 
 @router.get("/tickets/ticket/{ticket_id}")
-def get_ticket(ticket_id: str):
+async def get_ticket(ticket_id: str):
     tickets = _load_tickets()
     t = next((x for x in tickets if x["id"] == ticket_id), None)
     if not t:
@@ -201,7 +201,7 @@ def get_ticket(ticket_id: str):
     return response
 
 @router.post("/receiveQrToken")
-def receive_qr_token(token: str):
+async def receive_qr_token(token: str):
     """
     Receives QR token string from frontend and stores it in database.
     """
@@ -230,7 +230,7 @@ def receive_qr_token(token: str):
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @router.get("/getAllQrTokens")
-def get_all_qr_tokens():
+async def get_all_qr_tokens():
     """
     Retrieves all saved QR tokens from the database.
     """
@@ -238,7 +238,7 @@ def get_all_qr_tokens():
     return {"qr_tokens": received_tokens, "count": len(received_tokens)}
 
 @router.post("/validate")
-def validate_token(body: dict):
+async def validate_token(body: dict):
     """
     Expects: { "token": "<jwt>", "device": "gate-1", "operator":"op-1" }
     Returns user + event info on first scan, or already_scanned on second.

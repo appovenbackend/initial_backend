@@ -44,7 +44,7 @@ def expire_events_if_needed():
         _save_events(events)
 
 @router.post("/", response_model=Event)
-def create_event(ev: CreateEventIn):
+async def create_event(ev: CreateEventIn):
     events = _load_events()
     new_ev = Event(
         id="evt_" + uuid4().hex[:10],
@@ -66,7 +66,7 @@ def create_event(ev: CreateEventIn):
     return new_ev
 
 @router.get("/", response_model=List[Event])
-def list_events():
+async def list_events():
     expire_events_if_needed()
     events = _load_events()
     now = _now_ist()
@@ -82,7 +82,7 @@ def list_events():
     return results
 
 @router.get("/{event_id}", response_model=Event)
-def get_event(event_id: str):
+async def get_event(event_id: str):
     events = _load_events()
     e = next((x for x in events if x["id"] == event_id), None)
     if not e:
@@ -101,7 +101,7 @@ def get_event(event_id: str):
     return Event(**e)
 
 @router.get("/{event_id}/registered_users")
-def get_registered_users_for_event(event_id: str):
+async def get_registered_users_for_event(event_id: str):
     # Check if event exists
     events = _load_events()
     e = next((x for x in events if x["id"] == event_id), None)
@@ -125,7 +125,7 @@ def get_registered_users_for_event(event_id: str):
     }
 
 @router.put("/{event_id}/update_price")
-def update_event_price(event_id: str, new_price: int):
+async def update_event_price(event_id: str, new_price: int):
     if new_price < 0:
         raise HTTPException(status_code=400, detail="Price cannot be negative")
     
@@ -139,7 +139,7 @@ def update_event_price(event_id: str, new_price: int):
     return {"message": "Event price updated successfully", "new_price": new_price}
 
 @router.patch("/{event_id}")
-def update_event_partial(event_id: str, event_updates: dict):
+async def update_event_partial(event_id: str, event_updates: dict):
     """
     Update an existing event with partial data.
     Only provided fields will be updated, others remain unchanged.
@@ -275,7 +275,7 @@ def update_event_partial(event_id: str, event_updates: dict):
     }
 
 @router.put("/{event_id}/deactivate")
-def deactivate_event(event_id: str):
+async def deactivate_event(event_id: str):
     events = _load_events()
     e = next((x for x in events if x["id"] == event_id), None)
     if not e:

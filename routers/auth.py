@@ -41,7 +41,7 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     return encoded_jwt
 
 @router.post("/login")
-def login(user_in: UserIn):
+async def login(user_in: UserIn):
     try:
         users = _load_users()
 
@@ -85,12 +85,12 @@ def login(user_in: UserIn):
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 @router.get("/users")
-def get_all_users():
+async def get_all_users():
     users = _load_users()
     return {"users": users}
 
 @router.get("/user/{phone}")
-def get_user_by_phone(phone: str):
+async def get_user_by_phone(phone: str):
     users = _load_users()
     user = next((u for u in users if u["phone"] == phone), None)
     if not user:
