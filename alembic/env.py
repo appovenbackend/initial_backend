@@ -62,12 +62,9 @@ def run_migrations_online() -> None:
         from sqlalchemy import create_engine
         connectable = create_engine(DATABASE_URL, poolclass=pool.NullPool)
     else:
-        # Fallback to config
-        connectable = engine_from_config(
-            config.get_section(config.config_ini_section, {}),
-            prefix="sqlalchemy.",
-            poolclass=pool.NullPool,
-        )
+        # Use the same configuration as the application
+        from utils.database import engine
+        connectable = engine
 
     with connectable.connect() as connection:
         context.configure(
