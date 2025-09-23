@@ -15,7 +15,6 @@ from core.config import SECRET_KEY, IST
 from utils.database import read_events, write_events, get_database_session
 from core.config import USE_POSTGRESQL, DATABASE_URL
 from services.cache_service import get_cache, set_cache, is_cache_healthy
-from services.async_database import async_db_manager
 from datetime import datetime, timedelta
 import uvicorn
 import asyncio

@@ -10,7 +10,6 @@ authlib==1.2.1
 python-dotenv==1.0.0
 itsdangerous==2.1.2
 httpx==0.28.1
-psycopg2-binary
 asyncpg
 aiosqlite
 slowapi
