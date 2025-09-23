@@ -5,7 +5,7 @@ from dateutil import parser
 from utils.database import read_users, write_users, read_events, write_events, read_tickets, write_tickets, read_received_qr_tokens, write_received_qr_tokens
 from core.config import IST
 from services.payment_service import create_order
-from services.qr_service import create_qr_token, generate_qr_image
+from services.qr_service import create_qr_token
 from models.ticket import Ticket
 import json
 
@@ -115,9 +115,6 @@ async def register_free(payload: dict):
     ticket_id = "t_" + uuid4().hex[:10]
     issued = _now_ist_iso()
     qr_token = create_qr_token(ticket_id, userId, eventId, event_end_iso_ist=ev["endAt"])
-    # generate QR image file
-    qr_path = generate_qr_image(qr_token, ticket_id)
-
     new_ticket = Ticket(
         id=ticket_id,
         eventId=eventId,
@@ -127,7 +124,7 @@ async def register_free(payload: dict):
         isValidated=False,
         validatedAt=None,
         validationHistory=[],
-        meta={"kind": "free", "qrImagePath": qr_path}
+        meta={"kind": "free"}
     ).dict()
 
     tickets = _load_tickets()
@@ -158,8 +155,6 @@ async def register_paid(payload: dict):
     ticket_id = "t_" + uuid4().hex[:10]
     issued = _now_ist_iso()
     qr_token = create_qr_token(ticket_id, userId, eventId, event_end_iso_ist=ev["endAt"])
-    qr_path = generate_qr_image(qr_token, ticket_id)
-
     new_ticket = Ticket(
         id=ticket_id,
         eventId=eventId,
@@ -169,7 +164,7 @@ async def register_paid(payload: dict):
         isValidated=False,
         validatedAt=None,
         validationHistory=[],
-        meta={"kind": "paid", "amount": ev["priceINR"], "orderId": payload.get("orderId"), "qrImagePath": qr_path}
+        meta={"kind": "paid", "amount": ev["priceINR"], "orderId": payload.get("orderId")}
     ).dict()
 
     tickets = _load_tickets()

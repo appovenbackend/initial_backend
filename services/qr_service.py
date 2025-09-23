@@ -1,12 +1,7 @@
-import os
-import qrcode
 from datetime import datetime, timezone
 from jose import jwt
-from core.config import DATA_DIR, SECRET_KEY, ALGORITHM, QR_DEFAULT_TTL_SECONDS, IST
+from core.config import SECRET_KEY, ALGORITHM, QR_DEFAULT_TTL_SECONDS, IST
 from dateutil import parser
-
-QR_DIR = os.path.join(DATA_DIR, "qrs")
-os.makedirs(QR_DIR, exist_ok=True)
 
 def _ist_to_utc_ts(iso_str: str) -> int:
     dt = parser.isoparse(iso_str)
@@ -30,12 +25,3 @@ def create_qr_token(ticket_id: str, user_id: str, event_id: str, event_end_iso_i
     }
     token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
     return token
-
-def generate_qr_image(token: str, ticket_id: str) -> str:
-    qr = qrcode.QRCode(version=1, box_size=8, border=4)
-    qr.add_data(token)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    path = os.path.join(QR_DIR, f"{ticket_id}.png")
-    img.save(path)
-    return path
