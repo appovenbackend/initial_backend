@@ -28,12 +28,25 @@ In Railway service settings, ensure these variables are set:
 - `GOOGLE_CLIENT_ID` (Google OAuth client ID)
 - `GOOGLE_CLIENT_SECRET` (Google OAuth client secret)
 
+#### Connection Pooling (Recommended)
+Add these for optimal performance on Railway:
+- `DB_POOL_SIZE` (e.g., 20)
+- `DB_MAX_OVERFLOW` (e.g., 20)
+- `DB_POOL_RECYCLE` (e.g., 300)
+- `DB_POOL_TIMEOUT` (e.g., 30)
+- `DB_POOL_PRE_PING` (true)
+- `DB_POOL_USE_LIFO` (true)
+- `DB_CONNECT_TIMEOUT` (10)
+- `DB_STATEMENT_TIMEOUT_MS` (30000)
+- `USE_PGBOUNCER` (false unless you run PgBouncer alongside)
+
 **Important**: `JWT_SECRET` must remain consistent across deployments. If it changes, all user sessions will be invalidated.
 
 ### 3. Deploy and Check Logs
 After deployment, check the application logs for:
 - ✅ "Using PostgreSQL database for production persistence"
 - ❌ "WARNING: Using SQLite database!" (this indicates DATABASE_URL is not set)
+ - Pool config summary (via env variables) applied in `utils/database.py`
 
 ### 4. Health Check
 Visit `https://your-app-url/health` to verify:

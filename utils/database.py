@@ -6,7 +6,21 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import OperationalError, DisconnectionError
 from datetime import datetime
-from core.config import DATABASE_URL, DATABASE_FILE, USE_POSTGRESQL, IST
+from core.config import (
+    DATABASE_URL,
+    DATABASE_FILE,
+    USE_POSTGRESQL,
+    IST,
+    DB_POOL_SIZE,
+    DB_MAX_OVERFLOW,
+    DB_POOL_RECYCLE,
+    DB_POOL_TIMEOUT,
+    DB_POOL_PRE_PING,
+    DB_POOL_USE_LIFO,
+    DB_CONNECT_TIMEOUT,
+    DB_STATEMENT_TIMEOUT_MS,
+    USE_PGBOUNCER,
+)
 
 # Create SQLAlchemy engine
 if USE_POSTGRESQL and DATABASE_URL:
@@ -16,18 +30,29 @@ if USE_POSTGRESQL and DATABASE_URL:
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
 
-    engine = create_engine(
-        db_url,
-        pool_pre_ping=True,  # Test connections before use
-        pool_recycle=300,  # Recycle connections every 5 minutes
-        pool_size=10,  # Connection pool size
-        max_overflow=20,  # Max overflow connections
-        echo=False,  # Set to True for debugging
-        connect_args={
-            "connect_timeout": 10,  # Connection timeout
-            "options": "-c statement_timeout=30000"  # 30 second statement timeout
-        }
-    )
+    engine_kwargs = {
+        "echo": False,
+        "connect_args": {
+            "connect_timeout": DB_CONNECT_TIMEOUT,
+            "options": f"-c statement_timeout={DB_STATEMENT_TIMEOUT_MS}",
+        },
+    }
+
+    if USE_PGBOUNCER:
+        # When using PgBouncer in transaction mode, it's recommended to disable pooling at the client
+        engine = create_engine(db_url, poolclass=None, **engine_kwargs)
+    else:
+        engine = create_engine(
+            db_url,
+            pool_pre_ping=DB_POOL_PRE_PING,
+            pool_recycle=DB_POOL_RECYCLE,
+            pool_size=DB_POOL_SIZE,
+            max_overflow=DB_MAX_OVERFLOW,
+            pool_timeout=DB_POOL_TIMEOUT,
+            # SQLAlchemy 2.x allows pool_use_lifo to reduce contention
+            pool_use_lifo=DB_POOL_USE_LIFO,
+            **engine_kwargs,
+        )
 else:
     # Local SQLite
     engine = create_engine(

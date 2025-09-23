@@ -64,3 +64,18 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
 # QR token expiry extra (seconds) - we will normally set to event end time
 QR_DEFAULT_TTL_SECONDS = 60 * 60 * 24  # fallback 24 hours
+
+# Database Pooling Configuration (Railway-friendly; can be tuned via env)
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "20"))
+DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "20"))
+DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "300"))  # seconds
+DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))  # seconds
+DB_POOL_PRE_PING = os.getenv("DB_POOL_PRE_PING", "true").lower() == "true"
+DB_POOL_USE_LIFO = os.getenv("DB_POOL_USE_LIFO", "true").lower() == "true"
+
+# Psycopg2 connect args
+DB_CONNECT_TIMEOUT = int(os.getenv("DB_CONNECT_TIMEOUT", "10"))
+DB_STATEMENT_TIMEOUT_MS = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "30000"))
+
+# External pooler (PgBouncer) toggle: if true, disable SQLAlchemy pooling
+USE_PGBOUNCER = os.getenv("USE_PGBOUNCER", "false").lower() == "true"
