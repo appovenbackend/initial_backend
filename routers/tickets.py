@@ -245,13 +245,11 @@ async def get_qr_tokens_by_event(event_id: str):
 @router.post("/validate")
 async def validate_token(body: dict):
     """
-    Expects: { "token": "<jwt>", "eventId": "<event_id>", "device": "gate-1", "operator":"op-1" }
+    Expects: { "token": "<jwt>", "eventId": "<event_id>" }
     Returns user + event info on first scan, or already_scanned on second.
     """
     token = body.get("token")
     eventId = body.get("eventId")
-    device = body.get("device")
-    operator = body.get("operator")
     if not token or not eventId:
         raise HTTPException(status_code=400, detail="token and eventId required")
     # decode token safely using jose
@@ -311,7 +309,7 @@ async def validate_token(body: dict):
     ticket["isValidated"] = True
     ticket["validatedAt"] = validated_at
     hist = ticket.get("validationHistory") or []
-    hist.append({"ts": validated_at, "device": device, "operator": operator})
+    hist.append({"ts": validated_at})
     ticket["validationHistory"] = hist
 
     # persist tickets
