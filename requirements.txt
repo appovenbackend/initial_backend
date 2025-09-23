@@ -12,8 +12,15 @@ itsdangerous==2.1.2
 httpx==0.28.1
 psycopg2-binary
 asyncpg
+aiosqlite
+slowapi
 SQLAlchemy>=2.0.0
 alembic
 python-multipart
 requests
 psutil
+redis
+celery
+flower
+gunicorn
+slowapi

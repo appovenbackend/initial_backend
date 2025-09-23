@@ -6,12 +6,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from routers import auth, events, tickets
 from core.config import SECRET_KEY, IST
 from utils.database import read_events, write_events, get_database_session
 from core.config import USE_POSTGRESQL, DATABASE_URL
+from services.cache_service import get_cache, set_cache, is_cache_healthy
+from services.async_database import async_db_manager
 from datetime import datetime, timedelta
 import uvicorn
+import asyncio
 
 # Configure logging
 logging.basicConfig(
@@ -23,6 +30,12 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Rate limiting
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 def initialize_sample_data():
     """Initialize database on app startup - no sample data added to ensure persistence of existing data on deployment"""
@@ -94,7 +107,8 @@ async def general_exception_handler(request: Request, exc: Exception):
     }
 
 @app.get("/health")
-def health_check():
+@limiter.limit("100/minute")
+async def health_check(request: Request):
     """Enhanced health check endpoint with comprehensive monitoring"""
     try:
         logger.info("Health check initiated")
@@ -129,6 +143,9 @@ def health_check():
             "percent": memory.percent
         }
 
+        # Check cache health
+        cache_health = is_cache_healthy()
+
         health_status = {
             "status": "healthy",
             "database": {
@@ -140,6 +157,7 @@ def health_check():
             },
             "file_system": file_system_status,
             "memory": memory_usage,
+            "cache": {"healthy": cache_health},
             "timestamp": datetime.now(IST).isoformat(),
             "uptime": "N/A"  # Could be enhanced with process start time
         }
@@ -160,6 +178,30 @@ def health_check():
             },
             "timestamp": datetime.now(IST).isoformat()
         }
+
+@app.get("/cache-stats")
+@limiter.limit("50/minute")
+async def get_cache_stats(request: Request):
+    """Get cache statistics"""
+    try:
+        from services.cache_service import get_cache_stats
+        stats = get_cache_stats()
+        return {"cache_stats": stats}
+    except Exception as e:
+        logger.error(f"Cache stats error: {e}")
+        return {"error": "Failed to get cache stats", "details": str(e)}
+
+@app.post("/cache-clear")
+@limiter.limit("10/minute")
+async def clear_cache(request: Request):
+    """Clear cache (admin endpoint)"""
+    try:
+        from services.cache_service import clear_cache_pattern
+        cleared_count = clear_cache_pattern("*")
+        return {"message": f"Cleared {cleared_count} cache entries"}
+    except Exception as e:
+        logger.error(f"Cache clear error: {e}")
+        return {"error": "Failed to clear cache", "details": str(e)}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))  # Railway injects PORT

@@ -79,3 +79,8 @@ DB_STATEMENT_TIMEOUT_MS = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "30000"))
 
 # External pooler (PgBouncer) toggle: if true, disable SQLAlchemy pooling
 USE_PGBOUNCER = os.getenv("USE_PGBOUNCER", "false").lower() == "true"
+
+# Redis Configuration
+REDIS_URL = os.getenv("REDIS_URL", "localhost:6379")
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
+REDIS_DB = int(os.getenv("REDIS_DB", 0))

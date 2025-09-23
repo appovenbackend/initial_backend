@@ -9,6 +9,9 @@ class UserUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
+    bio: Optional[str] = None
+    starva_link: Optional[str] = None
+    instagram_id: Optional[str] = None
     picture: Optional[str] = None
     
 
@@ -20,5 +23,8 @@ class User(BaseModel):
     picture: Optional[str] = None
     google_id: Optional[str] = None
     role: str = "user"
+    bio: Optional[str] = None
+    starva_link: Optional[str] = None
+    instagram_id: Optional[str] = None
     subscribedEvents: List[str] = []
     createdAt: str

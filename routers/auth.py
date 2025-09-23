@@ -56,6 +56,11 @@ async def login(user_in: UserIn):
                 "userId": existing_user["id"],
                 "name": existing_user["name"],
                 "phone": existing_user["phone"],
+                "email": existing_user.get("email"),
+                "bio": existing_user.get("bio"),
+                "strava_link": existing_user.get("strava_link"),
+                "instagram_id": existing_user.get("instagram_id"),
+                "picture": existing_user.get("picture"),
                 "createdAt": existing_user["createdAt"],
                 "access_token": access_token,
                 "token_type": "bearer"
@@ -103,6 +108,9 @@ async def update_user(
     name: str = Form(None),
     phone: str = Form(None),
     email: str = Form(None),
+    bio: str = Form(None),
+    strava_link: str = Form(None),
+    instagram_id: str = Form(None),
     picture: UploadFile = File(None)
 ):
     users = _load_users()
@@ -123,6 +131,18 @@ async def update_user(
 
     if email is not None and email.strip():
         user["email"] = email.strip()
+        updated = True
+
+    if bio is not None:
+        user["bio"] = bio.strip() if bio.strip() else None
+        updated = True
+
+    if strava_link is not None:
+        user["strava_link"] = strava_link.strip() if strava_link.strip() else None
+        updated = True
+
+    if instagram_id is not None:
+        user["instagram_id"] = instagram_id.strip() if instagram_id.strip() else None
         updated = True
 
     if picture is not None:
@@ -180,6 +200,9 @@ async def google_callback(request: Request):
                     "email": existing_user.get("email"),
                     "picture": existing_user.get("picture"),
                     "phone": existing_user.get("phone"),
+                    "bio": existing_user.get("bio"),
+                    "strava_link": existing_user.get("strava_link"),
+                    "instagram_id": existing_user.get("instagram_id"),
                     "createdAt": existing_user["createdAt"]
                 },
                 "access_token": access_token,
@@ -206,6 +229,9 @@ async def google_callback(request: Request):
                 "name": new_user["name"],
                 "email": new_user["email"],
                 "picture": new_user["picture"],
+                "bio": new_user.get("bio"),
+                "strava_link": new_user.get("strava_link"),
+                "instagram_id": new_user.get("instagram_id"),
                 "createdAt": new_user["createdAt"]
             },
             "access_token": access_token,
