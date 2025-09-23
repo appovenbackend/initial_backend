@@ -1,15 +1,28 @@
 import os
-from fastapi import FastAPI
+import logging
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from routers import auth, events, tickets
 from core.config import SECRET_KEY, IST
 from utils.database import read_events, write_events, get_database_session
 from core.config import USE_POSTGRESQL, DATABASE_URL
 from datetime import datetime, timedelta
 import uvicorn
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 def initialize_sample_data():
     """Initialize database on app startup - no sample data added to ensure persistence of existing data on deployment"""
@@ -62,10 +75,30 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 def root():
     return {"msg": "Fitness Event Booking API running (times shown in IST)."}
 
+# Custom exception handlers
+@app.exception_handler(StarletteHTTPException)
+async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    logger.error(f"HTTP exception: {exc.detail} for {request.method} {request.url}")
+    return {
+        "error": "Request failed",
+        "detail": exc.detail,
+        "status_code": exc.status_code
+    }
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unexpected error: {str(exc)} for {request.method} {request.url}", exc_info=True)
+    return {
+        "error": "Internal server error",
+        "status_code": 500
+    }
+
 @app.get("/health")
 def health_check():
-    """Health check endpoint to verify database connection and configuration"""
+    """Enhanced health check endpoint with comprehensive monitoring"""
     try:
+        logger.info("Health check initiated")
+
         # Test database connection with a simple query
         from sqlalchemy import text
         db = get_database_session()
@@ -77,7 +110,26 @@ def health_check():
         from utils.database import read_users
         users_count = len(read_users())
 
-        return {
+        # Test file system access
+        try:
+            with open("data/test.txt", "w") as f:
+                f.write("test")
+            os.remove("data/test.txt")
+            file_system_status = "accessible"
+        except Exception as fs_error:
+            file_system_status = f"error: {str(fs_error)}"
+            logger.warning(f"File system access issue: {fs_error}")
+
+        # Check memory usage (basic)
+        import psutil
+        memory = psutil.virtual_memory()
+        memory_usage = {
+            "total": memory.total,
+            "available": memory.available,
+            "percent": memory.percent
+        }
+
+        health_status = {
             "status": "healthy",
             "database": {
                 "type": "PostgreSQL" if USE_POSTGRESQL else "SQLite",
@@ -86,9 +138,17 @@ def health_check():
                 "connection_test": "passed",
                 "users_count": users_count
             },
-            "timestamp": datetime.now(IST).isoformat()
+            "file_system": file_system_status,
+            "memory": memory_usage,
+            "timestamp": datetime.now(IST).isoformat(),
+            "uptime": "N/A"  # Could be enhanced with process start time
         }
+
+        logger.info(f"Health check completed: {health_status['status']}")
+        return health_status
+
     except Exception as e:
+        logger.error(f"Health check failed: {str(e)}", exc_info=True)
         return {
             "status": "unhealthy",
             "error": str(e),

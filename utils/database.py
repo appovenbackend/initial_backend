@@ -143,6 +143,19 @@ def retry_db_operation(max_retries=3, delay=1):
         return wrapper
     return decorator
 
+def execute_with_transaction(operation_func):
+    """Execute database operation within a transaction with proper rollback"""
+    db = SessionLocal()
+    try:
+        with db.begin():
+            result = operation_func(db)
+        return result
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        SessionLocal.remove()
+
 # Dependency to get database session
 def get_db():
     db = SessionLocal()
@@ -190,25 +203,26 @@ def read_users():
 def write_users(data):
     db = SessionLocal()
     try:
-        # Instead of deleting all, upsert each user to prevent data loss
-        for user_data in data:
-            # Filter to only include fields that exist in UserDB
-            user_dict = {k: v for k, v in user_data.items() if k in UserDB.__table__.columns.keys()}
+        # Use transaction for atomicity
+        with db.begin():
+            # Instead of deleting all, upsert each user to prevent data loss
+            for user_data in data:
+                # Filter to only include fields that exist in UserDB
+                user_dict = {k: v for k, v in user_data.items() if k in UserDB.__table__.columns.keys()}
 
-            # Serialize subscribedEvents to JSON if it's a list
-            if 'subscribedEvents' in user_dict and isinstance(user_dict['subscribedEvents'], list):
-                user_dict['subscribedEvents'] = json.dumps(user_dict['subscribedEvents'])
+                # Serialize subscribedEvents to JSON if it's a list
+                if 'subscribedEvents' in user_dict and isinstance(user_dict['subscribedEvents'], list):
+                    user_dict['subscribedEvents'] = json.dumps(user_dict['subscribedEvents'])
 
-            existing_user = db.query(UserDB).filter(UserDB.id == user_dict.get('id')).first()
-            if existing_user:
-                # Update existing user
-                for key, value in user_dict.items():
-                    setattr(existing_user, key, value)
-            else:
-                # Add new user
-                user = UserDB(**user_dict)
-                db.add(user)
-        db.commit()
+                existing_user = db.query(UserDB).filter(UserDB.id == user_dict.get('id')).first()
+                if existing_user:
+                    # Update existing user
+                    for key, value in user_dict.items():
+                        setattr(existing_user, key, value)
+                else:
+                    # Add new user
+                    user = UserDB(**user_dict)
+                    db.add(user)
     finally:
         SessionLocal.remove()
 
@@ -229,31 +243,32 @@ def read_events():
 def write_events(data):
     db = SessionLocal()
     try:
-        # Clear existing events
-        db.query(EventDB).delete()
-        # Add new events
-        for event_data in data:
-            # Filter only the fields that exist in EventDB model
-            filtered_data = {
-                'id': event_data.get('id'),
-                'title': event_data.get('title'),
-                'description': event_data.get('description'),
-                'city': event_data.get('city'),
-                'venue': event_data.get('venue'),
-                'startAt': event_data.get('startAt'),
-                'endAt': event_data.get('endAt'),
-                'priceINR': event_data.get('priceINR'),
-                'bannerUrl': event_data.get('bannerUrl'),
-                'isActive': event_data.get('isActive', True),
-                'createdAt': event_data.get('createdAt'),
-                'organizerName': event_data.get('organizerName', 'bhag'),
-                'organizerLogo': event_data.get('organizerLogo', 'https://example.com/default-logo.png')
-            }
-            # Remove None values for required fields
-            filtered_data = {k: v for k, v in filtered_data.items() if v is not None}
-            event = EventDB(**filtered_data)
-            db.add(event)
-        db.commit()
+        # Use transaction for atomicity
+        with db.begin():
+            # Clear existing events
+            db.query(EventDB).delete()
+            # Add new events
+            for event_data in data:
+                # Filter only the fields that exist in EventDB model
+                filtered_data = {
+                    'id': event_data.get('id'),
+                    'title': event_data.get('title'),
+                    'description': event_data.get('description'),
+                    'city': event_data.get('city'),
+                    'venue': event_data.get('venue'),
+                    'startAt': event_data.get('startAt'),
+                    'endAt': event_data.get('endAt'),
+                    'priceINR': event_data.get('priceINR'),
+                    'bannerUrl': event_data.get('bannerUrl'),
+                    'isActive': event_data.get('isActive', True),
+                    'createdAt': event_data.get('createdAt'),
+                    'organizerName': event_data.get('organizerName', 'bhag'),
+                    'organizerLogo': event_data.get('organizerLogo', 'https://example.com/default-logo.png')
+                }
+                # Remove None values for required fields
+                filtered_data = {k: v for k, v in filtered_data.items() if v is not None}
+                event = EventDB(**filtered_data)
+                db.add(event)
     finally:
         SessionLocal.remove()
 
@@ -292,35 +307,36 @@ def read_tickets():
 def write_tickets(data):
     db = SessionLocal()
     try:
-        # Clear existing tickets
-        db.query(TicketDB).delete()
-        # Add new tickets
-        for ticket_data in data:
-            # Filter only the fields that exist in TicketDB model
-            filtered_data = {
-                'id': ticket_data.get('id'),
-                'eventId': ticket_data.get('eventId'),
-                'userId': ticket_data.get('userId'),
-                'qrToken': ticket_data.get('qrToken'),
-                'issuedAt': ticket_data.get('issuedAt'),
-                'isValidated': ticket_data.get('isValidated', False),
-                'validatedAt': ticket_data.get('validatedAt'),
-                'validationHistory': ticket_data.get('validationHistory'),
-                'meta': ticket_data.get('meta')
-            }
+        # Use transaction for atomicity
+        with db.begin():
+            # Clear existing tickets
+            db.query(TicketDB).delete()
+            # Add new tickets
+            for ticket_data in data:
+                # Filter only the fields that exist in TicketDB model
+                filtered_data = {
+                    'id': ticket_data.get('id'),
+                    'eventId': ticket_data.get('eventId'),
+                    'userId': ticket_data.get('userId'),
+                    'qrToken': ticket_data.get('qrToken'),
+                    'issuedAt': ticket_data.get('issuedAt'),
+                    'isValidated': ticket_data.get('isValidated', False),
+                    'validatedAt': ticket_data.get('validatedAt'),
+                    'validationHistory': ticket_data.get('validationHistory'),
+                    'meta': ticket_data.get('meta')
+                }
 
-            # Serialize dict/list fields to JSON strings for PostgreSQL compatibility
-            if USE_POSTGRESQL:
-                if filtered_data.get('validationHistory') is not None:
-                    filtered_data['validationHistory'] = json.dumps(filtered_data['validationHistory'])
-                if filtered_data.get('meta') is not None:
-                    filtered_data['meta'] = json.dumps(filtered_data['meta'])
+                # Serialize dict/list fields to JSON strings for PostgreSQL compatibility
+                if USE_POSTGRESQL:
+                    if filtered_data.get('validationHistory') is not None:
+                        filtered_data['validationHistory'] = json.dumps(filtered_data['validationHistory'])
+                    if filtered_data.get('meta') is not None:
+                        filtered_data['meta'] = json.dumps(filtered_data['meta'])
 
-            # Remove None values for required fields
-            filtered_data = {k: v for k, v in filtered_data.items() if k in ['id', 'eventId', 'userId', 'qrToken', 'issuedAt'] or v is not None}
-            ticket = TicketDB(**filtered_data)
-            db.add(ticket)
-        db.commit()
+                # Remove None values for required fields
+                filtered_data = {k: v for k, v in filtered_data.items() if k in ['id', 'eventId', 'userId', 'qrToken', 'issuedAt'] or v is not None}
+                ticket = TicketDB(**filtered_data)
+                db.add(ticket)
     finally:
         SessionLocal.remove()
 
@@ -340,23 +356,24 @@ def read_received_qr_tokens():
 def write_received_qr_tokens(data):
     db = SessionLocal()
     try:
-        # Clear existing tokens
-        db.query(ReceivedQrTokenDB).delete()
-        # Add new tokens
-        for token_data in data:
-            # Filter only the fields that exist in ReceivedQrTokenDB model
-            filtered_data = {
-                'id': token_data.get('id'),
-                'token': token_data.get('token'),
-                'eventId': token_data.get('eventId'),
-                'receivedAt': token_data.get('receivedAt'),
-                'source': token_data.get('source')
-            }
-            # Remove None values for required fields
-            filtered_data = {k: v for k, v in filtered_data.items() if k in ['id', 'token', 'eventId', 'receivedAt'] or v is not None}
-            token = ReceivedQrTokenDB(**filtered_data)
-            db.add(token)
-        db.commit()
+        # Use transaction for atomicity
+        with db.begin():
+            # Clear existing tokens
+            db.query(ReceivedQrTokenDB).delete()
+            # Add new tokens
+            for token_data in data:
+                # Filter only the fields that exist in ReceivedQrTokenDB model
+                filtered_data = {
+                    'id': token_data.get('id'),
+                    'token': token_data.get('token'),
+                    'eventId': token_data.get('eventId'),
+                    'receivedAt': token_data.get('receivedAt'),
+                    'source': token_data.get('source')
+                }
+                # Remove None values for required fields
+                filtered_data = {k: v for k, v in filtered_data.items() if k in ['id', 'token', 'eventId', 'receivedAt'] or v is not None}
+                token = ReceivedQrTokenDB(**filtered_data)
+                db.add(token)
     finally:
         SessionLocal.remove()
 

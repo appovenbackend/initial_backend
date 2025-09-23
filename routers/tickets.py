@@ -8,32 +8,101 @@ from services.payment_service import create_order
 from services.qr_service import create_qr_token
 from models.ticket import Ticket
 import json
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+# Simple in-memory cache
+_cache = {}
+_cache_ttl = {}  # To track cache expiration
+CACHE_TTL = 300  # 5 minutes
+
+def _get_cache(key: str):
+    """Get item from cache if not expired"""
+    if key in _cache and key in _cache_ttl:
+        if datetime.now().timestamp() - _cache_ttl[key] < CACHE_TTL:
+            logger.debug(f"Cache hit for key: {key}")
+            return _cache[key]
+        else:
+            # Expired, remove from cache
+            del _cache[key]
+            del _cache_ttl[key]
+    logger.debug(f"Cache miss for key: {key}")
+    return None
+
+def _set_cache(key: str, value):
+    """Set item in cache with current timestamp"""
+    _cache[key] = value
+    _cache_ttl[key] = datetime.now().timestamp()
+    logger.debug(f"Set cache for key: {key}")
+
+def _clear_cache(key: str = None):
+    """Clear specific key or entire cache"""
+    if key:
+        if key in _cache:
+            del _cache[key]
+        if key in _cache_ttl:
+            del _cache_ttl[key]
+        logger.debug(f"Cleared cache for key: {key}")
+    else:
+        _cache.clear()
+        _cache_ttl.clear()
+        logger.debug("Cleared entire cache")
 
 router = APIRouter(prefix="", tags=["Tickets"])
 
 def _load_users():
-    return read_users()
+    cache_key = "users"
+    cached_data = _get_cache(cache_key)
+    if cached_data is not None:
+        return cached_data
+    data = read_users()
+    _set_cache(cache_key, data)
+    return data
 
 def _save_users(data):
     write_users(data)
+    _clear_cache("users")  # Clear cache when data is modified
 
 def _load_events():
-    return read_events()
+    cache_key = "events"
+    cached_data = _get_cache(cache_key)
+    if cached_data is not None:
+        return cached_data
+    data = read_events()
+    _set_cache(cache_key, data)
+    return data
 
 def _save_events(data):
     write_events(data)
+    _clear_cache("events")  # Clear cache when data is modified
 
 def _load_tickets():
-    return read_tickets()
+    cache_key = "tickets"
+    cached_data = _get_cache(cache_key)
+    if cached_data is not None:
+        return cached_data
+    data = read_tickets()
+    _set_cache(cache_key, data)
+    return data
 
 def _save_tickets(data):
     write_tickets(data)
+    _clear_cache("tickets")  # Clear cache when data is modified
 
 def _load_received_qr_tokens():
-    return read_received_qr_tokens()
+    cache_key = "qr_tokens"
+    cached_data = _get_cache(cache_key)
+    if cached_data is not None:
+        return cached_data
+    data = read_received_qr_tokens()
+    _set_cache(cache_key, data)
+    return data
 
 def _save_received_qr_tokens(data):
     write_received_qr_tokens(data)
+    _clear_cache("qr_tokens")  # Clear cache when data is modified
 
 def _now_ist_iso():
     return datetime.now(IST).isoformat()
@@ -46,15 +115,19 @@ def _to_ist(dt_iso: str):
 
 @router.post("/create-order")
 async def api_create_order(phone: str, eventId: str):
+    logger.info(f"Creating order for phone: {phone}, eventId: {eventId}")
     users = _load_users()
     user = next((u for u in users if u["phone"] == phone), None)
     if not user:
+        logger.warning(f"User not found for phone: {phone}")
         raise HTTPException(status_code=404, detail="User not found")
     events = _load_events()
     ev = next((e for e in events if e["id"] == eventId), None)
     if not ev:
+        logger.warning(f"Event not found for eventId: {eventId}")
         raise HTTPException(status_code=404, detail="Event not found")
     order = create_order(eventId, ev["priceINR"])
+    logger.info(f"Order created successfully for eventId: {eventId}")
     return order
 
 @router.post("/register/free", response_model=Ticket)

@@ -16,3 +16,4 @@ SQLAlchemy>=2.0.0
 alembic
 python-multipart
 requests
+psutil
