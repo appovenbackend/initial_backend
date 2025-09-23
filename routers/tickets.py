@@ -57,7 +57,7 @@ async def api_create_order(phone: str, eventId: str):
     order = create_order(eventId, ev["priceINR"])
     return order
 
-@router.post("/register/", response_model=Ticket)
+@router.post("/register/free", response_model=Ticket)
 async def register_free(payload: dict):
     """
     payload: { "phone": "...", "eventId": "..." }
