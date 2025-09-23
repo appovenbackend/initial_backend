@@ -9,6 +9,7 @@ from utils.database import read_events, write_events, read_tickets, read_users
 from core.config import IST
 from services.qr_service import create_qr_token
 from typing import List
+from time import time
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
@@ -43,6 +44,22 @@ def expire_events_if_needed():
     if changed:
         _save_events(events)
 
+# Simple in-memory TTL cache for events list
+_CACHE = {"events_list": (0.0, [])}
+_EVENTS_TTL_SECONDS = 30
+
+def _cache_get(key: str):
+    ts, val = _CACHE.get(key, (0.0, None))
+    if time() - ts < _EVENTS_TTL_SECONDS:
+        return val
+    return None
+
+def _cache_set(key: str, val):
+    _CACHE[key] = (time(), val)
+
+def _cache_invalidate_events_list():
+    _CACHE["events_list"] = (0.0, [])
+
 @router.post("/", response_model=Event)
 async def create_event(ev: CreateEventIn):
     events = _load_events()
@@ -63,10 +80,16 @@ async def create_event(ev: CreateEventIn):
     ).dict()
     events.append(new_ev)
     _save_events(events)
+    _cache_invalidate_events_list()
     return new_ev
 
 @router.get("/", response_model=List[Event])
 async def list_events():
+    # Cache first
+    cached = _cache_get("events_list")
+    if cached is not None:
+        return cached
+
     expire_events_if_needed()
     events = _load_events()
     now = _now_ist()
@@ -79,6 +102,7 @@ async def list_events():
         except Exception:
             # if malformed, skip
             continue
+    _cache_set("events_list", results)
     return results
 
 @router.get("/{event_id}", response_model=Event)
@@ -136,6 +160,7 @@ async def update_event_price(event_id: str, new_price: int):
     
     e["priceINR"] = new_price
     _save_events(events)
+    _cache_invalidate_events_list()
     return {"message": "Event price updated successfully", "new_price": new_price}
 
 @router.patch("/{event_id}")
@@ -266,6 +291,7 @@ async def update_event_partial(event_id: str, event_updates: dict):
     # Update the event in the list
     events[event_index] = updated_event
     _save_events(events)
+    _cache_invalidate_events_list()
 
     # Return the updated event
     return {
@@ -284,4 +310,5 @@ async def deactivate_event(event_id: str):
         raise HTTPException(status_code=400, detail="Event already inactive")
     e["isActive"] = False
     _save_events(events)
+    _cache_invalidate_events_list()
     return {"message": "Event deactivated successfully"}

@@ -88,6 +88,11 @@ async def register_free(payload: dict):
     # capacity check
     if ev.get("capacity", 0) > 0 and ev.get("reserved", 0) >= ev.get("capacity", 0):
         raise HTTPException(status_code=400, detail="Event full")
+    # Guard against duplicate free registration at ticket level as well (legacy users)
+    existing_tickets = _load_tickets()
+    if any(t for t in existing_tickets if t.get("userId") == userId and t.get("eventId") == eventId):
+        raise HTTPException(status_code=400, detail="User already has a ticket for this event")
+
     # reserve seat
     ev["reserved"] = ev.get("reserved", 0) + 1
     # persist events
@@ -127,7 +132,7 @@ async def register_free(payload: dict):
         meta={"kind": "free"}
     ).dict()
 
-    tickets = _load_tickets()
+    tickets = existing_tickets
     tickets.append(new_ticket)
     _save_tickets(tickets)
     return new_ticket

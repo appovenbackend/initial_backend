@@ -70,10 +70,10 @@ class UserDB(Base):
 
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    phone = Column(String, unique=True, nullable=True)
+    phone = Column(String, unique=True, nullable=True, index=True)
     email = Column(String, nullable=True)
     picture = Column(String, nullable=True)
-    google_id = Column(String, unique=True, nullable=True)
+    google_id = Column(String, unique=True, nullable=True, index=True)
     role = Column(String, default="user")
     createdAt = Column(String, nullable=False)
 
@@ -86,10 +86,10 @@ class EventDB(Base):
     city = Column(String, nullable=False)
     venue = Column(String, nullable=False)
     startAt = Column(String, nullable=False)
-    endAt = Column(String, nullable=False)
+    endAt = Column(String, nullable=False, index=True)
     priceINR = Column(Integer, nullable=False)
     bannerUrl = Column(String, nullable=True)
-    isActive = Column(Boolean, default=True)
+    isActive = Column(Boolean, default=True, index=True)
     createdAt = Column(String, nullable=False)
     organizerName = Column(String, nullable=True, default="bhag")
     organizerLogo = Column(String, nullable=True, default="https://example.com/default-logo.png")
@@ -98,11 +98,11 @@ class TicketDB(Base):
     __tablename__ = "tickets"
 
     id = Column(String, primary_key=True, index=True)
-    eventId = Column(String, nullable=False)
-    userId = Column(String, nullable=False)
+    eventId = Column(String, nullable=False, index=True)
+    userId = Column(String, nullable=False, index=True)
     qrToken = Column(String, nullable=False)
     issuedAt = Column(String, nullable=False)
-    isValidated = Column(Boolean, default=False)
+    isValidated = Column(Boolean, default=False, index=True)
     validatedAt = Column(String, nullable=True)
     validationHistory = Column(Text, nullable=True)  # JSON string
     meta = Column(Text, nullable=True)  # JSON string
@@ -112,7 +112,7 @@ class ReceivedQrTokenDB(Base):
 
     id = Column(String, primary_key=True, index=True)
     token = Column(String, nullable=False)
-    eventId = Column(String, nullable=False)
+    eventId = Column(String, nullable=False, index=True)
     receivedAt = Column(String, nullable=False)
     source = Column(String, nullable=True)
 
