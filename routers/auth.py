@@ -109,7 +109,7 @@ async def update_user(
     phone: str = Form(None),
     email: str = Form(None),
     bio: str = Form(None),
-    strava_link: str = Form(None),
+    starva_link: str = Form(None),
     instagram_id: str = Form(None),
     picture: UploadFile = File(None)
 ):
@@ -126,7 +126,12 @@ async def update_user(
         updated = True
 
     if phone is not None and phone.strip():
-        user["phone"] = phone.strip()
+        new_phone = phone.strip()
+        # Check if phone number already exists for another user
+        existing_phone_user = next((u for u in users if u["phone"] == new_phone and u["id"] != user_id), None)
+        if existing_phone_user:
+            raise HTTPException(status_code=400, detail="Phone number already exists for another user")
+        user["phone"] = new_phone
         updated = True
 
     if email is not None and email.strip():
@@ -137,8 +142,8 @@ async def update_user(
         user["bio"] = bio.strip() if bio.strip() else None
         updated = True
 
-    if strava_link is not None:
-        user["strava_link"] = strava_link.strip() if strava_link.strip() else None
+    if starva_link is not None:
+        user["strava_link"] = starva_link.strip() if starva_link.strip() else None
         updated = True
 
     if instagram_id is not None:
