@@ -29,6 +29,9 @@ if USE_POSTGRESQL and DATABASE_URL:
     # Convert Railway's postgres:// to postgresql+psycopg2://
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif "postgresql+asyncpg://" in db_url:
+        # Convert asyncpg to psycopg2 for sync operations
+        db_url = db_url.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
 
     engine_kwargs = {
         "echo": False,
