@@ -109,7 +109,7 @@ async def update_user(
     phone: str = Form(None),
     email: str = Form(None),
     bio: str = Form(None),
-    starva_link: str = Form(None),
+    strava_link: str = Form(None),
     instagram_id: str = Form(None),
     picture: UploadFile = File(None)
 ):
@@ -142,8 +142,8 @@ async def update_user(
         user["bio"] = bio.strip() if bio.strip() else None
         updated = True
 
-    if starva_link is not None:
-        user["strava_link"] = starva_link.strip() if starva_link.strip() else None
+    if strava_link is not None:
+        user["strava_link"] = strava_link.strip() if strava_link.strip() else None
         updated = True
 
     if instagram_id is not None:

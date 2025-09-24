@@ -10,7 +10,7 @@ class UserUpdate(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     bio: Optional[str] = None
-    starva_link: Optional[str] = None
+    strava_link: Optional[str] = None
     instagram_id: Optional[str] = None
     picture: Optional[str] = None
     
@@ -24,7 +24,7 @@ class User(BaseModel):
     google_id: Optional[str] = None
     role: str = "user"
     bio: Optional[str] = None
-    starva_link: Optional[str] = None
+    strava_link: Optional[str] = None
     instagram_id: Optional[str] = None
     subscribedEvents: List[str] = []
     createdAt: str

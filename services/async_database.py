@@ -100,7 +100,7 @@ class AsyncDatabaseManager:
                         return {"error": "User not found"}
 
                     # Update fields
-                    update_fields = ['name', 'phone', 'email', 'bio', 'starva_link', 'instagram_id']
+                    update_fields = ['name', 'phone', 'email', 'bio', 'strava_link', 'instagram_id']
                     updated = False
 
                     for field in update_fields:
@@ -119,7 +119,7 @@ class AsyncDatabaseManager:
                             "phone": user.phone,
                             "email": user.email,
                             "bio": user.bio,
-                            "starva_link": user.starva_link,
+                            "strava_link": user.strava_link,
                             "instagram_id": user.instagram_id
                         }
                     }
