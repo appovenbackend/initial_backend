@@ -1,6 +1,7 @@
 import os
 import logging
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -95,19 +96,25 @@ def root():
 @app.exception_handler(StarletteHTTPException)
 async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
     logger.error(f"HTTP exception: {exc.detail} for {request.method} {request.url}")
-    return {
-        "error": "Request failed",
-        "detail": exc.detail,
-        "status_code": exc.status_code
-    }
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": "Request failed",
+            "detail": exc.detail,
+            "status_code": exc.status_code
+        }
+    )
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unexpected error: {str(exc)} for {request.method} {request.url}", exc_info=True)
-    return {
-        "error": "Internal server error",
-        "status_code": 500
-    }
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "status_code": 500
+        }
+    )
 
 @app.get("/health")
 @limiter.limit("100/minute")
@@ -170,17 +177,20 @@ async def health_check(request: Request):
 
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}", exc_info=True)
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-            "database": {
-                "type": "PostgreSQL" if USE_POSTGRESQL else "SQLite",
-                "postgresql_enabled": USE_POSTGRESQL,
-                "database_url_present": bool(DATABASE_URL),
-                "connection_test": "failed"
-            },
-            "timestamp": datetime.now(IST).isoformat()
-        }
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "unhealthy",
+                "error": str(e),
+                "database": {
+                    "type": "PostgreSQL" if USE_POSTGRESQL else "SQLite",
+                    "postgresql_enabled": USE_POSTGRESQL,
+                    "database_url_present": bool(DATABASE_URL),
+                    "connection_test": "failed"
+                },
+                "timestamp": datetime.now(IST).isoformat()
+            }
+        )
 
 @app.get("/cache-stats")
 @limiter.limit("50/minute")
@@ -192,7 +202,10 @@ async def get_cache_stats(request: Request):
         return {"cache_stats": stats}
     except Exception as e:
         logger.error(f"Cache stats error: {e}")
-        return {"error": "Failed to get cache stats", "details": str(e)}
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to get cache stats", "details": str(e)}
+        )
 
 @app.post("/cache-clear")
 @limiter.limit("10/minute")
@@ -204,7 +217,10 @@ async def clear_cache(request: Request):
         return {"message": f"Cleared {cleared_count} cache entries"}
     except Exception as e:
         logger.error(f"Cache clear error: {e}")
-        return {"error": "Failed to clear cache", "details": str(e)}
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to clear cache", "details": str(e)}
+        )
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))  # Railway injects PORT
