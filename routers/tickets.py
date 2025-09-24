@@ -253,7 +253,25 @@ async def register_paid(payload: dict):
 @router.get("/tickets/{user_id}")
 async def get_tickets_for_user(user_id: str):
     tickets = _load_tickets()
-    return [t for t in tickets if t["userId"] == user_id]
+    events = _load_events()
+
+    # Enhanced response with event details
+    enhanced_tickets = []
+    for ticket in tickets:
+        if ticket["userId"] == user_id:
+            # Find corresponding event
+            event = next((e for e in events if e["id"] == ticket["eventId"]), None)
+            if event:
+                # Add event name and other details
+                ticket_with_event = ticket.copy()
+                ticket_with_event["eventName"] = event["title"]
+                ticket_with_event["eventCity"] = event["city"]
+                ticket_with_event["eventVenue"] = event["venue"]
+                ticket_with_event["eventStart"] = event["startAt"]
+                ticket_with_event["eventEnd"] = event["endAt"]
+                enhanced_tickets.append(ticket_with_event)
+
+    return enhanced_tickets
 
 @router.get("/tickets/ticket/{ticket_id}")
 async def get_ticket(ticket_id: str):
