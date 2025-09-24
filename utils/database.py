@@ -220,12 +220,26 @@ def write_users(data):
                 if 'subscribedEvents' in user_dict and isinstance(user_dict['subscribedEvents'], list):
                     user_dict['subscribedEvents'] = json.dumps(user_dict['subscribedEvents'])
 
-                existing_user = db.query(UserDB).filter(UserDB.id == user_dict.get('id')).first()
+                user_id = user_dict.get('id')
+                user_phone = user_dict.get('phone')
+
+                # Check if user exists by ID first
+                existing_user = db.query(UserDB).filter(UserDB.id == user_id).first()
+
                 if existing_user:
                     # Update existing user
                     for key, value in user_dict.items():
                         setattr(existing_user, key, value)
                 else:
+                    # Check if phone number already exists (to avoid unique constraint violation)
+                    if user_phone:
+                        phone_exists = db.query(UserDB).filter(UserDB.phone == user_phone).first()
+                        if phone_exists:
+                            # Update the existing user with the same phone number
+                            for key, value in user_dict.items():
+                                setattr(phone_exists, key, value)
+                            continue
+
                     # Add new user
                     user = UserDB(**user_dict)
                     db.add(user)
