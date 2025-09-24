@@ -99,6 +99,9 @@ class EventDB(Base):
     createdAt = Column(String, nullable=False)
     organizerName = Column(String, nullable=True, default="bhag")
     organizerLogo = Column(String, nullable=True, default="https://example.com/default-logo.png")
+    coordinate_lat = Column(String, nullable=True)
+    coordinate_long = Column(String, nullable=True)
+    address_url = Column(String, nullable=True)
 
 class TicketDB(Base):
     __tablename__ = "tickets"
@@ -283,7 +286,10 @@ def write_events(data):
                     'isActive': event_data.get('isActive', True),
                     'createdAt': event_data.get('createdAt'),
                     'organizerName': event_data.get('organizerName', 'bhag'),
-                    'organizerLogo': event_data.get('organizerLogo', 'https://example.com/default-logo.png')
+                    'organizerLogo': event_data.get('organizerLogo', 'https://example.com/default-logo.png'),
+                    'coordinate_lat': event_data.get('coordinate_lat'),
+                    'coordinate_long': event_data.get('coordinate_long'),
+                    'address_url': event_data.get('address_url')
                 }
                 # Remove None values for required fields
                 filtered_data = {k: v for k, v in filtered_data.items() if v is not None}

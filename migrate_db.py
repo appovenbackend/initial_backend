@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, text
 from core.config import DATABASE_URL, USE_POSTGRESQL
 
 def migrate_events_table():
-    """Add organizerName and organizerLogo columns to events table"""
+    """Add organizerName, organizerLogo, coordinate_lat, coordinate_long, and address_url columns to events table"""
 
     if not USE_POSTGRESQL:
         print("⚠️  Migration only needed for PostgreSQL. Skipping for SQLite.")
@@ -35,7 +35,7 @@ def migrate_events_table():
                 SELECT column_name
                 FROM information_schema.columns
                 WHERE table_name = 'events'
-                AND column_name IN ('organizerName', 'organizerLogo')
+                AND column_name IN ('organizerName', 'organizerLogo', 'coordinate_lat', 'coordinate_long', 'address_url')
             """))
 
             existing_columns = [row[0] for row in result.fetchall()]
@@ -63,6 +63,33 @@ def migrate_events_table():
                 print("✅ Added organizerLogo column")
             else:
                 print("ℹ️  organizerLogo column already exists")
+
+            # Add coordinate_lat column if it doesn't exist
+            if 'coordinate_lat' not in existing_columns:
+                print("📝 Adding coordinate_lat column...")
+                conn.execute(text('ALTER TABLE events ADD COLUMN "coordinate_lat" VARCHAR'))
+                conn.commit()
+                print("✅ Added coordinate_lat column")
+            else:
+                print("ℹ️  coordinate_lat column already exists")
+
+            # Add coordinate_long column if it doesn't exist
+            if 'coordinate_long' not in existing_columns:
+                print("📝 Adding coordinate_long column...")
+                conn.execute(text('ALTER TABLE events ADD COLUMN "coordinate_long" VARCHAR'))
+                conn.commit()
+                print("✅ Added coordinate_long column")
+            else:
+                print("ℹ️  coordinate_long column already exists")
+
+            # Add address_url column if it doesn't exist
+            if 'address_url' not in existing_columns:
+                print("📝 Adding address_url column...")
+                conn.execute(text('ALTER TABLE events ADD COLUMN "address_url" VARCHAR'))
+                conn.commit()
+                print("✅ Added address_url column")
+            else:
+                print("ℹ️  address_url column already exists")
 
         print("🎉 Migration completed successfully!")
 

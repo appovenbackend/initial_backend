@@ -76,7 +76,10 @@ async def create_event(ev: CreateEventIn):
         isActive=ev.isActive if ev.isActive is not None else True,
         createdAt=datetime.now(IST).isoformat(),
         organizerName=ev.organizerName,
-        organizerLogo=ev.organizerLogo
+        organizerLogo=ev.organizerLogo,
+        coordinate_lat=ev.coordinate_lat,
+        coordinate_long=ev.coordinate_long,
+        address_url=ev.address_url
     ).dict()
     events.append(new_ev)
     _save_events(events)
@@ -274,6 +277,30 @@ async def update_event_partial(event_id: str, event_updates: dict):
             validation_errors.append("organizerLogo must be a valid URL string or null")
         else:
             updated_event["organizerLogo"] = organizer_logo
+
+    # Validate coordinate_lat if provided
+    if "coordinate_lat" in event_updates:
+        coordinate_lat = event_updates["coordinate_lat"]
+        if coordinate_lat is not None and (not isinstance(coordinate_lat, str) or not coordinate_lat.strip()):
+            validation_errors.append("coordinate_lat must be a valid string or null")
+        else:
+            updated_event["coordinate_lat"] = coordinate_lat
+
+    # Validate coordinate_long if provided
+    if "coordinate_long" in event_updates:
+        coordinate_long = event_updates["coordinate_long"]
+        if coordinate_long is not None and (not isinstance(coordinate_long, str) or not coordinate_long.strip()):
+            validation_errors.append("coordinate_long must be a valid string or null")
+        else:
+            updated_event["coordinate_long"] = coordinate_long
+
+    # Validate address_url if provided
+    if "address_url" in event_updates:
+        address_url = event_updates["address_url"]
+        if address_url is not None and (not isinstance(address_url, str) or not address_url.strip()):
+            validation_errors.append("address_url must be a valid URL string or null")
+        else:
+            updated_event["address_url"] = address_url
 
     # Check for validation errors
     if validation_errors:

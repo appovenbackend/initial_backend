@@ -13,6 +13,9 @@ class CreateEventIn(BaseModel):
     isActive: Optional[bool] = True
     organizerName: Optional[str] = "bhag"
     organizerLogo: Optional[str] = "https://example.com/default-logo.png"
+    coordinate_lat: Optional[str] = None
+    coordinate_long: Optional[str] = None
+    address_url: Optional[str] = None
 
 class Event(BaseModel):
     id: str
@@ -28,3 +31,6 @@ class Event(BaseModel):
     createdAt: str
     organizerName: Optional[str] = "bhag"
     organizerLogo: Optional[str] = "https://example.com/default-logo.png"
+    coordinate_lat: Optional[str] = None
+    coordinate_long: Optional[str] = None
+    address_url: Optional[str] = None
