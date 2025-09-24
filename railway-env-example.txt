@@ -1,0 +1,42 @@
+=== Railway PostgreSQL Deployment Configuration ===
+
+Required Environment Variables for Railway:
+
+DATABASE_URL=postgresql://username:password@host:port/database
+JWT_SECRET=your-super-secret-jwt-key-here
+GOOGLE_CLIENT_ID=your-google-oauth-client-id
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+REDIS_URL=redis://host:port
+REDIS_PASSWORD=your-redis-password
+
+Optional Environment Variables:
+
+DB_POOL_SIZE=20
+DB_MAX_OVERFLOW=20
+DB_POOL_RECYCLE=300
+DB_POOL_TIMEOUT=30
+DB_POOL_PRE_PING=true
+DB_CONNECT_TIMEOUT=10
+DB_STATEMENT_TIMEOUT_MS=30000
+USE_PGBOUNCER=false
+
+=== How It Works ===
+
+1. When DATABASE_URL is NOT set (local development):
+   - Uses SQLite database (data/app.db)
+   - Shows warning messages about production deployment
+   - Perfect for local testing
+
+2. When DATABASE_URL IS set (Railway deployment):
+   - Automatically switches to PostgreSQL
+   - Applies SSL configuration for Railway
+   - Uses connection pooling optimized for production
+   - Shows success message: "✅ Using PostgreSQL database for production persistence"
+
+3. JWT_SECRET handling:
+   - Default value for local development (with warning)
+   - Must be set in production to persist user sessions
+
+4. Redis integration:
+   - Optional for local development
+   - Recommended for production caching

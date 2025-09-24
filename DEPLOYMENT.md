@@ -1,95 +1,119 @@
-# Deployment Guide - Database Persistence Fix
+# 🚀 Railway PostgreSQL Deployment Guide
 
-## Problem
-Users were not persisting in the database after redeployment because the application was falling back to SQLite instead of using PostgreSQL.
-
-## Root Cause
-- The application is designed to use PostgreSQL in production (Railway) via `DATABASE_URL` environment variable
-- When `DATABASE_URL` is not set, it falls back to SQLite
-- SQLite database files are gitignored, so they don't persist across deployments
-- Railway provides `DATABASE_URL` automatically, but it may not be properly configured
-
-## Solution
-1. **Ensure PostgreSQL is attached** to your Railway service
-2. **Verify DATABASE_URL** is set in Railway environment variables
-3. **Check application logs** for database connection warnings
+## Overview
+This application is designed to automatically switch between SQLite (local development) and PostgreSQL (production deployment) based on environment variables.
 
 ## Railway Deployment Steps
 
-### 1. Attach PostgreSQL Database
-- In Railway dashboard, go to your service
-- Click "Add Plugin" → "PostgreSQL"
-- This automatically creates a PostgreSQL database and sets `DATABASE_URL`
+### 1. Deploy to Railway
+1. Connect your GitHub repository to Railway
+2. Railway will automatically detect this is a Python application
+3. The build process will install all dependencies from `requirements.txt`
 
-### 2. Verify Environment Variables
-In Railway service settings, ensure these variables are set:
-- `DATABASE_URL` (auto-provided by PostgreSQL plugin)
-- `JWT_SECRET` (your JWT signing secret - **CRITICAL for user session persistence**)
-- `GOOGLE_CLIENT_ID` (Google OAuth client ID)
-- `GOOGLE_CLIENT_SECRET` (Google OAuth client secret)
+### 2. Add PostgreSQL Database
+1. In your Railway project, go to the **Database** tab
+2. Click **New** → **Add PostgreSQL**
+3. Railway will automatically provide a `DATABASE_URL` environment variable
 
-#### Connection Pooling (Recommended)
-Add these for optimal performance on Railway:
-- `DB_POOL_SIZE` (e.g., 20)
-- `DB_MAX_OVERFLOW` (e.g., 20)
-- `DB_POOL_RECYCLE` (e.g., 300)
-- `DB_POOL_TIMEOUT` (e.g., 30)
-- `DB_POOL_PRE_PING` (true)
-- `DB_POOL_USE_LIFO` (true)
-- `DB_CONNECT_TIMEOUT` (10)
-- `DB_STATEMENT_TIMEOUT_MS` (30000)
-- `USE_PGBOUNCER` (false unless you run PgBouncer alongside)
+### 3. Set Environment Variables
+Add these environment variables in your Railway project settings:
 
-**Important**: `JWT_SECRET` must remain consistent across deployments. If it changes, all user sessions will be invalidated.
-
-### 3. Deploy and Check Logs
-After deployment, check the application logs for:
-- ✅ "Using PostgreSQL database for production persistence"
-- ❌ "WARNING: Using SQLite database!" (this indicates DATABASE_URL is not set)
- - Pool config summary (via env variables) applied in `utils/database.py`
-
-### 4. Health Check
-Visit `https://your-app-url/health` to verify:
-- `"database": {"type": "PostgreSQL", "postgresql_enabled": true}`
-- `"users_count": <number>` shows existing users
-
-## Local Development
-- Uses SQLite (`data/app.db`)
-- Data persists locally but is gitignored
-- For production testing, set `DATABASE_URL` environment variable
-
-## Troubleshooting
-
-### If still using SQLite:
-1. Check Railway variables tab - `DATABASE_URL` should be present
-2. Redeploy the application
-3. Check if PostgreSQL plugin is properly attached
-
-### If PostgreSQL connection fails:
-1. Verify database credentials in `DATABASE_URL`
-2. Check Railway PostgreSQL plugin status
-3. Ensure SSL mode is properly configured
-
-### User Sessions Lost After Redeployment
-If users lose authentication after redeployment:
-1. Check that `JWT_SECRET` is set in Railway environment variables
-2. Ensure `JWT_SECRET` remains the same across deployments
-3. Look for "Using default JWT_SECRET!" warning in logs
-4. If using default secret, set a custom `JWT_SECRET` in Railway variables
-
-### Database Migration
-If switching from SQLite to PostgreSQL, existing data will need to be migrated manually or users will need to re-register.
-
-#### Adding New Columns to Existing Tables
-When adding new columns to existing database tables (like organizer fields to events), run the migration script:
-
+#### Required Variables:
 ```bash
-python migrate_db.py
+DATABASE_URL=postgresql://[auto-provided-by-railway]
+JWT_SECRET=your-super-secret-jwt-key-here
+GOOGLE_CLIENT_ID=your-google-oauth-client-id
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
 ```
 
-This script will:
-- Check if the new columns already exist
-- Add missing columns with appropriate defaults
-- Preserve existing data
+#### Optional Variables (with defaults):
+```bash
+REDIS_URL=redis://host:port
+REDIS_PASSWORD=your-redis-password
+DB_POOL_SIZE=20
+DB_MAX_OVERFLOW=20
+DB_POOL_RECYCLE=300
+DB_POOL_TIMEOUT=30
+DB_POOL_PRE_PING=true
+```
 
-**Important**: Always run migrations after deploying code that adds new database columns.
+### 4. Redeploy
+After setting the environment variables, trigger a redeploy:
+- Go to the **Deployments** tab
+- Click **Deploy latest commit**
+
+## How Auto-Switching Works
+
+### Local Development (No DATABASE_URL)
+```
+⚠️  WARNING: Using SQLite database! This will NOT persist data across deployments.
+=== DATABASE CONFIGURATION ===
+DATABASE_URL present: False
+USE_POSTGRESQL: False
+Using SQLite: data/app.db
+===============================
+```
+
+### Production Deployment (With DATABASE_URL)
+```
+✅ Using PostgreSQL database for production persistence.
+=== DATABASE CONFIGURATION ===
+DATABASE_URL present: True
+USE_POSTGRESQL: True
+DATABASE_URL starts with: postgresql://...
+===============================
+```
+
+## Database Schema
+The application automatically creates all necessary tables:
+- `users` - User accounts and profiles
+- `events` - Event information and organizer details
+- `tickets` - Ticket management and validation
+- `received_qr_tokens` - QR code token storage
+
+## Production Features
+- ✅ **SSL Connections**: Automatically configured for Railway PostgreSQL
+- ✅ **Connection Pooling**: Optimized for production performance
+- ✅ **Error Handling**: Robust database connection retry logic
+- ✅ **Migration Support**: Database schema updates handled automatically
+- ✅ **Monitoring**: Health check endpoints for production monitoring
+
+## Environment Variables Reference
+
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | Yes | None |
+| `JWT_SECRET` | JWT token signing secret | Yes | `supersecretkey123` |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID | Yes | None |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | Yes | None |
+| `REDIS_URL` | Redis connection URL | No | `localhost:6379` |
+| `REDIS_PASSWORD` | Redis password | No | None |
+| `DB_POOL_SIZE` | Database connection pool size | No | `20` |
+| `DB_MAX_OVERFLOW` | Max overflow connections | No | `20` |
+| `DB_POOL_RECYCLE` | Connection recycle time (seconds) | No | `300` |
+| `DB_POOL_TIMEOUT` | Connection timeout (seconds) | No | `30` |
+| `DB_POOL_PRE_PING` | Pre-ping connections | No | `true` |
+| `DB_CONNECT_TIMEOUT` | Connection timeout (seconds) | No | `10` |
+| `DB_STATEMENT_TIMEOUT_MS` | Query timeout (milliseconds) | No | `30000` |
+| `USE_PGBOUNCER` | Use PgBouncer (disables SQLAlchemy pooling) | No | `false` |
+
+## Health Monitoring
+Once deployed, monitor your application using:
+- `GET /health` - Comprehensive system health check
+- `GET /cache-stats` - Cache performance metrics
+- Railway's built-in monitoring dashboard
+
+## Troubleshooting
+1. **Database Connection Issues**: Check that `DATABASE_URL` is correctly set
+2. **SSL Errors**: The app automatically adds `?sslmode=require` for Railway
+3. **Performance Issues**: Adjust connection pool settings via environment variables
+4. **JWT Session Loss**: Ensure `JWT_SECRET` is set to a persistent value
+
+## Security Notes
+- Never commit `JWT_SECRET` or OAuth credentials to version control
+- Use Railway's environment variable encryption for sensitive data
+- Monitor database connections in production
+- Enable Railway's automatic HTTPS for secure connections
+
+---
+**Ready for Production!** 🚀 Your application will automatically use PostgreSQL when deployed to Railway with the proper environment variables configured.
