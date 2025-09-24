@@ -126,6 +126,62 @@ def migrate_received_qr_tokens_table():
         print(f"❌ Migration failed: {e}")
         raise
 
+def migrate_users_table():
+    """Add missing columns to users table (PostgreSQL)."""
+    if not USE_POSTGRESQL:
+        print("⚠️  Migration only needed for PostgreSQL. Skipping for SQLite.")
+        return
+
+    if not DATABASE_URL:
+        print("❌ No DATABASE_URL found. Cannot run migration.")
+        return
+
+    print("🔄 Starting users table migration...")
+    engine = create_engine(DATABASE_URL)
+    try:
+        with engine.connect() as conn:
+            # Check existing columns
+            result = conn.execute(text(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'users'
+                """
+            ))
+            existing_columns = {row[0] for row in result.fetchall()}
+
+            # Add bio column
+            if 'bio' not in existing_columns:
+                print("📝 Adding bio column to users...")
+                conn.execute(text('ALTER TABLE users ADD COLUMN bio VARCHAR'))
+                conn.commit()
+                print("✅ Added bio column")
+            else:
+                print("ℹ️  bio column already exists")
+
+            # Add starva_link column (note: keeping the typo to match database model)
+            if 'starva_link' not in existing_columns:
+                print("📝 Adding starva_link column to users...")
+                conn.execute(text('ALTER TABLE users ADD COLUMN starva_link VARCHAR'))
+                conn.commit()
+                print("✅ Added starva_link column")
+            else:
+                print("ℹ️  starva_link column already exists")
+
+            # Add instagram_id column
+            if 'instagram_id' not in existing_columns:
+                print("📝 Adding instagram_id column to users...")
+                conn.execute(text('ALTER TABLE users ADD COLUMN instagram_id VARCHAR'))
+                conn.commit()
+                print("✅ Added instagram_id column")
+            else:
+                print("ℹ️  instagram_id column already exists")
+
+        print("🎉 Users table migration completed!")
+    except Exception as e:
+        print(f"❌ Users migration failed: {e}")
+        raise
+
 if __name__ == "__main__":
     migrate_events_table()
     migrate_received_qr_tokens_table()
