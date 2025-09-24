@@ -32,9 +32,6 @@ logger = logging.getLogger(__name__)
 
 # Rate limiting
 limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_middleware(SlowAPIMiddleware)
 
 def initialize_sample_data():
     """Initialize database on app startup - no sample data added to ensure persistence of existing data on deployment"""
@@ -60,6 +57,12 @@ run_migration()
 initialize_sample_data()
 
 app = FastAPI(title="Fitness Event Booking API (IST)")
+
+# Rate limiting setup
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
 app.add_middleware(
