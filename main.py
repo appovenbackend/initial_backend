@@ -92,27 +92,49 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 def root():
     return {"msg": "Fitness Event Booking API running (times shown in IST)."}
 
-# Custom exception handlers
+# Custom exception handlers with better error handling for high concurrency
 @app.exception_handler(StarletteHTTPException)
 async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
     logger.error(f"HTTP exception: {exc.detail} for {request.method} {request.url}")
+
+    # Add request ID for tracking
+    request_id = getattr(request.state, 'request_id', 'unknown')
+
     return JSONResponse(
         status_code=exc.status_code,
         content={
             "error": "Request failed",
             "detail": exc.detail,
-            "status_code": exc.status_code
+            "status_code": exc.status_code,
+            "request_id": request_id,
+            "timestamp": datetime.now(IST).isoformat()
         }
     )
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unexpected error: {str(exc)} for {request.method} {request.url}", exc_info=True)
+
+    # Add request ID for tracking
+    request_id = getattr(request.state, 'request_id', 'unknown')
+
+    # Determine if this is a database-related error
+    error_type = "unknown"
+    if "connection" in str(exc).lower() or "database" in str(exc).lower():
+        error_type = "database_connection"
+    elif "timeout" in str(exc).lower():
+        error_type = "timeout"
+    elif "memory" in str(exc).lower():
+        error_type = "memory"
+
     return JSONResponse(
         status_code=500,
         content={
             "error": "Internal server error",
-            "status_code": 500
+            "status_code": 500,
+            "error_type": error_type,
+            "request_id": request_id,
+            "timestamp": datetime.now(IST).isoformat()
         }
     )
 
