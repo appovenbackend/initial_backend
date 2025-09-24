@@ -6,7 +6,6 @@ from models.event import CreateEventIn, Event
 from models.user import User
 from models.ticket import Ticket
 from utils.database import read_events, write_events, read_tickets, read_users
-from services.async_database import async_db_manager
 from core.config import IST
 from services.qr_service import create_qr_token
 from typing import List
