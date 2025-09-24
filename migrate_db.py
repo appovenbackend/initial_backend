@@ -159,14 +159,14 @@ def migrate_users_table():
             else:
                 print("ℹ️  bio column already exists")
 
-            # Add starva_link column (note: keeping the typo to match database model)
-            if 'starva_link' not in existing_columns:
-                print("📝 Adding starva_link column to users...")
-                conn.execute(text('ALTER TABLE users ADD COLUMN starva_link VARCHAR'))
+            # Add strava_link column (corrected spelling)
+            if 'strava_link' not in existing_columns:
+                print("📝 Adding strava_link column to users...")
+                conn.execute(text('ALTER TABLE users ADD COLUMN strava_link VARCHAR'))
                 conn.commit()
-                print("✅ Added starva_link column")
+                print("✅ Added strava_link column")
             else:
-                print("ℹ️  starva_link column already exists")
+                print("ℹ️  strava_link column already exists")
 
             # Add instagram_id column
             if 'instagram_id' not in existing_columns:

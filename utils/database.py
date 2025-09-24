@@ -79,7 +79,7 @@ class UserDB(Base):
     google_id = Column(String, unique=True, nullable=True, index=True)
     role = Column(String, default="user")
     bio = Column(String, nullable=True)
-    starva_link = Column(String, nullable=True)
+    strava_link = Column(String, nullable=True)
     instagram_id = Column(String, nullable=True)
     createdAt = Column(String, nullable=False)
 
