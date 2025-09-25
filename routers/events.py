@@ -108,6 +108,34 @@ async def list_events():
     _cache_set("events_list", results)
     return results
 
+@router.get("/recent", response_model=List[Event])
+async def list_recent_events(limit: int = 10):
+    """
+    Get the most recent events by creation date.
+    Returns up to the specified limit (default 10) of the most recently added events.
+    """
+    events = _load_events()
+    # Sort by createdAt descending (most recent first)
+    try:
+        sorted_events = sorted(events, key=lambda e: parser.isoparse(e["createdAt"]), reverse=True)
+    except Exception:
+        # If parsing fails, fall back to original order
+        sorted_events = events
+
+    # Take the first 'limit' events
+    recent_events = sorted_events[:limit]
+
+    # Convert to Event models
+    result = []
+    for e in recent_events:
+        try:
+            result.append(Event(**e))
+        except Exception:
+            # Skip malformed events
+            continue
+
+    return result
+
 @router.get("/{event_id}", response_model=Event)
 async def get_event(event_id: str):
     events = _load_events()

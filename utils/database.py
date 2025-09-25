@@ -81,6 +81,7 @@ class UserDB(Base):
     bio = Column(String, nullable=True)
     strava_link = Column(String, nullable=True)
     instagram_id = Column(String, nullable=True)
+    is_private = Column(Boolean, default=False)
     createdAt = Column(String, nullable=False)
 
 class EventDB(Base):
@@ -124,6 +125,16 @@ class ReceivedQrTokenDB(Base):
     eventId = Column(String, nullable=False, index=True)
     receivedAt = Column(String, nullable=False)
     source = Column(String, nullable=True)
+
+class UserFollowDB(Base):
+    __tablename__ = "user_follows"
+
+    id = Column(String, primary_key=True, index=True)
+    follower_id = Column(String, nullable=False, index=True)  # User who is following
+    following_id = Column(String, nullable=False, index=True)  # User being followed
+    status = Column(String, nullable=False, default="pending")  # 'pending', 'accepted', 'blocked'
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -400,6 +411,44 @@ def write_received_qr_tokens(data):
                 filtered_data = {k: v for k, v in filtered_data.items() if k in ['id', 'token', 'eventId', 'receivedAt'] or v is not None}
                 token = ReceivedQrTokenDB(**filtered_data)
                 db.add(token)
+    finally:
+        SessionLocal.remove()
+
+def read_user_follows():
+    db = SessionLocal()
+    try:
+        follows = db.query(UserFollowDB).all()
+        result = []
+        for follow in follows:
+            follow_dict = follow.__dict__.copy()
+            follow_dict.pop('_sa_instance_state', None)
+            result.append(follow_dict)
+        return result
+    finally:
+        SessionLocal.remove()
+
+def write_user_follows(data):
+    db = SessionLocal()
+    try:
+        # Use transaction for atomicity
+        with db.begin():
+            # Clear existing follows
+            db.query(UserFollowDB).delete()
+            # Add new follows
+            for follow_data in data:
+                # Filter only the fields that exist in UserFollowDB model
+                filtered_data = {
+                    'id': follow_data.get('id'),
+                    'follower_id': follow_data.get('follower_id'),
+                    'following_id': follow_data.get('following_id'),
+                    'status': follow_data.get('status', 'pending'),
+                    'created_at': follow_data.get('created_at'),
+                    'updated_at': follow_data.get('updated_at')
+                }
+                # Remove None values for required fields
+                filtered_data = {k: v for k, v in filtered_data.items() if k in ['id', 'follower_id', 'following_id', 'status', 'created_at', 'updated_at'] or v is not None}
+                follow = UserFollowDB(**filtered_data)
+                db.add(follow)
     finally:
         SessionLocal.remove()
 

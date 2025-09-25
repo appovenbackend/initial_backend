@@ -27,4 +27,5 @@ class User(BaseModel):
     strava_link: Optional[str] = None
     instagram_id: Optional[str] = None
     subscribedEvents: List[str] = []
+    is_private: bool = False
     createdAt: str

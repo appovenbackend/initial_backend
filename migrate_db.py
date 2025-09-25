@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-Database migration script to add organizerName and organizerLogo columns to events table.
-Run this script after deploying the new code to add the missing columns.
+Database migration script for Fitness Event Booking API
+Handles all database schema updates for production deployment.
+Run this script after deploying new code to ensure database compatibility.
 """
 
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, MetaData, Table, Column, String, Boolean
 from core.config import DATABASE_URL, USE_POSTGRESQL
 
 def migrate_events_table():
@@ -204,11 +205,89 @@ def migrate_users_table():
             else:
                 print("ℹ️  instagram_id column already exists")
 
+            # Add is_private column for social features
+            if 'is_private' not in existing_columns:
+                print("📝 Adding is_private column to users...")
+                conn.execute(text('ALTER TABLE users ADD COLUMN is_private BOOLEAN DEFAULT FALSE'))
+                conn.commit()
+                print("✅ Added is_private column")
+            else:
+                print("ℹ️  is_private column already exists")
+
         print("🎉 Users table migration completed!")
     except Exception as e:
         print(f"❌ Users migration failed: {e}")
         raise
 
+def create_user_follows_table():
+    """Create user_follows table for social features (PostgreSQL)."""
+    if not USE_POSTGRESQL:
+        print("⚠️  Migration only needed for PostgreSQL. Skipping for SQLite.")
+        return
+
+    if not DATABASE_URL:
+        print("❌ No DATABASE_URL found. Cannot run migration.")
+        return
+
+    print("🔄 Creating user_follows table...")
+    engine = create_engine(DATABASE_URL)
+    try:
+        with engine.connect() as conn:
+            # Check if table exists
+            result = conn.execute(text(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_name = 'user_follows'
+                """
+            ))
+            table_exists = result.fetchone() is not None
+
+            if not table_exists:
+                print("📝 Creating user_follows table...")
+                conn.execute(text("""
+                    CREATE TABLE user_follows (
+                        id VARCHAR PRIMARY KEY,
+                        follower_id VARCHAR NOT NULL,
+                        following_id VARCHAR NOT NULL,
+                        status VARCHAR NOT NULL DEFAULT 'pending',
+                        created_at VARCHAR NOT NULL,
+                        updated_at VARCHAR NOT NULL
+                    )
+                """))
+                conn.commit()
+
+                # Create indexes for performance
+                conn.execute(text('CREATE INDEX idx_user_follows_follower ON user_follows(follower_id)'))
+                conn.execute(text('CREATE INDEX idx_user_follows_following ON user_follows(following_id)'))
+                conn.execute(text('CREATE INDEX idx_user_follows_status ON user_follows(status)'))
+                conn.commit()
+
+                print("✅ Created user_follows table with indexes")
+            else:
+                print("ℹ️  user_follows table already exists")
+
+        print("🎉 User follows table creation completed!")
+    except Exception as e:
+        print(f"❌ User follows table creation failed: {e}")
+        raise
+
 if __name__ == "__main__":
-    migrate_events_table()
-    migrate_received_qr_tokens_table()
+    print("🚀 Starting database migration for Fitness Event Booking API")
+    print("=" * 60)
+
+    try:
+        migrate_events_table()
+        migrate_received_qr_tokens_table()
+        migrate_users_table()
+        create_user_follows_table()
+
+        print("\n" + "=" * 60)
+        print("🎉 All database migrations completed successfully!")
+        print("✅ Your database is now ready for production deployment.")
+        print("=" * 60)
+
+    except Exception as e:
+        print(f"\n❌ Migration failed: {e}")
+        print("Please check your DATABASE_URL and PostgreSQL connection.")
+        sys.exit(1)
