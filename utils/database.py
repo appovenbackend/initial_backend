@@ -279,33 +279,40 @@ def write_events(data):
     try:
         # Use transaction for atomicity
         with db.begin():
-            # Clear existing events
-            db.query(EventDB).delete()
-            # Add new events
+            # Add new events WITHOUT clearing existing ones
             for event_data in data:
-                # Filter only the fields that exist in EventDB model
-                filtered_data = {
-                    'id': event_data.get('id'),
-                    'title': event_data.get('title'),
-                    'description': event_data.get('description'),
-                    'city': event_data.get('city'),
-                    'venue': event_data.get('venue'),
-                    'startAt': event_data.get('startAt'),
-                    'endAt': event_data.get('endAt'),
-                    'priceINR': event_data.get('priceINR'),
-                    'bannerUrl': event_data.get('bannerUrl'),
-                    'isActive': event_data.get('isActive', True),
-                    'createdAt': event_data.get('createdAt'),
-                    'organizerName': event_data.get('organizerName', 'bhag'),
-                    'organizerLogo': event_data.get('organizerLogo', 'https://example.com/default-logo.png'),
-                    'coordinate_lat': event_data.get('coordinate_lat'),
-                    'coordinate_long': event_data.get('coordinate_long'),
-                    'address_url': event_data.get('address_url')
-                }
-                # Remove None values for required fields
-                filtered_data = {k: v for k, v in filtered_data.items() if v is not None}
-                event = EventDB(**filtered_data)
-                db.add(event)
+                # Check if event already exists
+                existing_event = db.query(EventDB).filter(EventDB.id == event_data.get('id')).first()
+                if existing_event:
+                    # Update existing event
+                    for key, value in event_data.items():
+                        if hasattr(existing_event, key):
+                            setattr(existing_event, key, value)
+                else:
+                    # Add new event
+                    # Filter only the fields that exist in EventDB model
+                    filtered_data = {
+                        'id': event_data.get('id'),
+                        'title': event_data.get('title'),
+                        'description': event_data.get('description'),
+                        'city': event_data.get('city'),
+                        'venue': event_data.get('venue'),
+                        'startAt': event_data.get('startAt'),
+                        'endAt': event_data.get('endAt'),
+                        'priceINR': event_data.get('priceINR'),
+                        'bannerUrl': event_data.get('bannerUrl'),
+                        'isActive': event_data.get('isActive', True),
+                        'createdAt': event_data.get('createdAt'),
+                        'organizerName': event_data.get('organizerName', 'bhag'),
+                        'organizerLogo': event_data.get('organizerLogo', 'https://example.com/default-logo.png'),
+                        'coordinate_lat': event_data.get('coordinate_lat'),
+                        'coordinate_long': event_data.get('coordinate_long'),
+                        'address_url': event_data.get('address_url')
+                    }
+                    # Remove None values for required fields
+                    filtered_data = {k: v for k, v in filtered_data.items() if v is not None}
+                    event = EventDB(**filtered_data)
+                    db.add(event)
     finally:
         SessionLocal.remove()
 

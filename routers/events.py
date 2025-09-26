@@ -66,7 +66,6 @@ def _cache_invalidate_events_list():
 
 @router.post("/", response_model=Event)
 async def create_event(ev: CreateEventIn):
-    events = _load_events()
     new_ev = Event(
         id="evt_" + uuid4().hex[:10],
         title=ev.title,
@@ -85,9 +84,11 @@ async def create_event(ev: CreateEventIn):
         coordinate_long=ev.coordinate_long,
         address_url=ev.address_url
     ).dict()
-    events.append(new_ev)
-    _save_events(events)
+
+    # Save only the new event (write_events now handles upsert)
+    _save_events([new_ev])
     _cache_invalidate_events_list()
+
     # Notify all users about new event (best effort; phones must be E.164)
     try:
         users = read_users()
@@ -97,6 +98,7 @@ async def create_event(ev: CreateEventIn):
     except Exception:
         # Do not block event creation on messaging failures
         pass
+
     return new_ev
 
 @router.get("/", response_model=List[Event])
@@ -160,7 +162,7 @@ async def get_event(event_id: str):
         end = _to_ist(e["endAt"])
         if end <= _now_ist():
             e["isActive"] = False
-            _save_events(events)
+            _save_events(events)  # Pass all events for update
             raise HTTPException(status_code=404, detail="Event expired")
     except HTTPException:
         raise
@@ -203,7 +205,7 @@ async def update_event_price(event_id: str, new_price: int):
         raise HTTPException(status_code=404, detail="Event not found")
     
     e["priceINR"] = new_price
-    _save_events(events)
+    _save_events(events)  # Pass all events for update
     _cache_invalidate_events_list()
     return {"message": "Event price updated successfully", "new_price": new_price}
 
@@ -358,7 +360,7 @@ async def update_event_partial(event_id: str, event_updates: dict):
 
     # Update the event in the list
     events[event_index] = updated_event
-    _save_events(events)
+    _save_events(events)  # Pass all events for update
     _cache_invalidate_events_list()
 
     # Notify subscribed users about update (best effort)
@@ -391,6 +393,6 @@ async def deactivate_event(event_id: str):
     if not e.get("isActive", True):
         raise HTTPException(status_code=400, detail="Event already inactive")
     e["isActive"] = False
-    _save_events(events)
+    _save_events(events)  # Pass all events for update
     _cache_invalidate_events_list()
     return {"message": "Event deactivated successfully"}
