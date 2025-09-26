@@ -84,3 +84,12 @@ USE_PGBOUNCER = os.getenv("USE_PGBOUNCER", "false").lower() == "true"
 REDIS_URL = os.getenv("REDIS_URL", "localhost:6379")
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
 REDIS_DB = int(os.getenv("REDIS_DB", 0))
+
+# Payments (Razorpay)
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
+RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET")
+
+# QR token hardening
+QR_TOKEN_SHORT_TTL_SECONDS = int(os.getenv("QR_TOKEN_SHORT_TTL_SECONDS", "900"))  # 15m for on-demand short tokens
+JWT_KID = os.getenv("JWT_KID", "v1")

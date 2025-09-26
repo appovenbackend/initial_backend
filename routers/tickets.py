@@ -4,12 +4,14 @@ from datetime import datetime
 from dateutil import parser
 from utils.database import read_users, write_users, read_events, write_events, read_tickets, write_tickets, read_received_qr_tokens, write_received_qr_tokens
 from core.config import IST
-from services.payment_service import create_order
+from services.payment_service import razorpay_create_order, razorpay_verify_signature
 from services.qr_service import create_qr_token
 from models.ticket import Ticket
 import json
 import logging
 from services.cache_service import get_cache, set_cache, delete_cache
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -36,6 +38,7 @@ def _clear_cache(key: str = None):
         logger.debug(f"Cleared cache for key: {key}")
 
 router = APIRouter(prefix="", tags=["Tickets"])
+limiter = Limiter(key_func=get_remote_address)
 
 def _load_users():
     cache_key = "users:all"
@@ -98,22 +101,22 @@ def _to_ist(dt_iso: str):
         dt = dt.replace(tzinfo=IST)
     return dt.astimezone(IST)
 
-@router.post("/create-order")
-async def api_create_order(phone: str, eventId: str):
-    logger.info(f"Creating order for phone: {phone}, eventId: {eventId}")
+@router.post("/payments/order")
+async def payments_create_order(phone: str, eventId: str):
+    """Create Razorpay order in paise; returns order data and key_id for client checkout."""
     users = _load_users()
     user = next((u for u in users if u["phone"] == phone), None)
     if not user:
-        logger.warning(f"User not found for phone: {phone}")
         raise HTTPException(status_code=404, detail="User not found")
     events = _load_events()
     ev = next((e for e in events if e["id"] == eventId), None)
     if not ev:
-        logger.warning(f"Event not found for eventId: {eventId}")
         raise HTTPException(status_code=404, detail="Event not found")
-    order = create_order(eventId, ev["priceINR"])
-    logger.info(f"Order created successfully for eventId: {eventId}")
-    return order
+    if ev.get("priceINR", 0) <= 0:
+        raise HTTPException(status_code=400, detail="Event is free")
+
+    order = await razorpay_create_order(eventId, int(ev["priceINR"]))
+    return {"order": order}
 
 @router.post("/register/free", response_model=Ticket)
 async def register_free(payload: dict):
@@ -195,25 +198,35 @@ async def register_free(payload: dict):
     _save_tickets(tickets)
     return new_ticket
 
-@router.post("/register/paid", response_model=Ticket)
-async def register_paid(payload: dict):
-    """
-    payload: { "phone": "...", "eventId": "...", "orderId": "..." }
-    This simulates post-payment confirmation.
+@router.post("/payments/verify", response_model=Ticket)
+async def payments_verify(payload: dict):
+    """Verify Razorpay signature and issue ticket on success.
+    payload: { phone, eventId, razorpay_order_id, razorpay_payment_id, razorpay_signature }
     """
     phone = payload.get("phone")
     eventId = payload.get("eventId")
+    order_id = payload.get("razorpay_order_id")
+    payment_id = payload.get("razorpay_payment_id")
+    signature = payload.get("razorpay_signature")
+
+    if not all([phone, eventId, order_id, payment_id, signature]):
+        raise HTTPException(status_code=400, detail="Missing fields")
+
+    if not razorpay_verify_signature(order_id, payment_id, signature):
+        raise HTTPException(status_code=400, detail="Invalid payment signature")
+
     users = _load_users()
     user = next((u for u in users if u["phone"] == phone), None)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     userId = user["id"]
+
     events = _load_events()
     ev = next((e for e in events if e["id"] == eventId), None)
     if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
-    if ev.get("priceINR", 0) == 0:
-        raise HTTPException(status_code=400, detail="Event is free; use free register")
+    if ev.get("priceINR", 0) <= 0:
+        raise HTTPException(status_code=400, detail="Event is free")
 
     ticket_id = "t_" + uuid4().hex[:10]
     issued = _now_ist_iso()
@@ -227,7 +240,7 @@ async def register_paid(payload: dict):
         isValidated=False,
         validatedAt=None,
         validationHistory=[],
-        meta={"kind": "paid", "amount": ev["priceINR"], "orderId": payload.get("orderId")}
+        meta={"kind": "paid", "amount": ev["priceINR"], "orderId": order_id, "paymentId": payment_id}
     ).dict()
 
     tickets = _load_tickets()
@@ -324,6 +337,7 @@ async def get_qr_tokens_by_event(event_id: str):
     return {"qr_tokens": event_tokens, "count": len(event_tokens)}
 
 @router.post("/validate")
+@limiter.limit("120/minute")
 async def validate_token(body: dict):
     """
     Expects: { "token": "<jwt>", "eventId": "<event_id>" }
