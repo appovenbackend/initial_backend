@@ -126,9 +126,9 @@ def generate_datetime(days_ahead: int = 0) -> tuple[str, str]:
     start_time = now + timedelta(days=days_ahead, hours=random.randint(6, 10))
     end_time = start_time + timedelta(hours=random.randint(2, 4))
 
-    # Format as ISO string without timezone to let the backend handle it
-    start_iso = start_time.strftime('%Y-%m-%dT%H:%M:%S')
-    end_iso = end_time.strftime('%Y-%m-%dT%H:%M:%S')
+    # Format as ISO string with timezone info to match backend expectations
+    start_iso = start_time.strftime('%Y-%m-%dT%H:%M:%S+05:30')  # IST timezone
+    end_iso = end_time.strftime('%Y-%m-%dT%H:%M:%S+05:30')      # IST timezone
 
     return start_iso, end_iso
 

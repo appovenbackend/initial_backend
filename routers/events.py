@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil import parser
 from models.event import CreateEventIn, Event
 from models.user import User
@@ -42,7 +42,8 @@ def expire_events_if_needed():
     for e in events:
         try:
             end_ist_dt = _to_ist(e["endAt"])
-            if e.get("isActive", True) and end_ist_dt <= now:
+            # Only expire if event is more than 1 hour in the past (safety buffer)
+            if e.get("isActive", True) and end_ist_dt <= now - timedelta(hours=1):
                 e["isActive"] = False
                 changed = True
         except Exception:
@@ -112,14 +113,29 @@ async def list_events():
     events = _load_events()
     now = _now_ist()
     results = []
+
+    # Debug logging
+    print(f"DEBUG: Found {len(events)} total events in database")
+    print(f"DEBUG: Current IST time: {now}")
+
     for e in events:
         try:
             end = _to_ist(e["endAt"])
-            if e.get("isActive", True) and end > now:
+            is_active = e.get("isActive", True)
+            end_in_future = end > now
+
+            print(f"DEBUG: Event {e.get('title', 'Unknown')} - Active: {is_active}, End: {end}, End > Now: {end_in_future}")
+
+            if is_active and end_in_future:
                 results.append(Event(**e))
-        except Exception:
-            # if malformed, skip
+                print(f"DEBUG: ✓ Including event: {e.get('title', 'Unknown')}")
+            else:
+                print(f"DEBUG: ✗ Filtering out event: {e.get('title', 'Unknown')} (Active: {is_active}, End in future: {end_in_future})")
+        except Exception as exc:
+            print(f"DEBUG: ✗ Error processing event {e.get('title', 'Unknown')}: {exc}")
             continue
+
+    print(f"DEBUG: Returning {len(results)} active future events")
     _cache_set_events_list(results)
     return results
 
