@@ -10,6 +10,12 @@ from core.config import IST
 from services.qr_service import create_qr_token
 from typing import List
 from time import time
+from services.cache_service import get_cache, set_cache, delete_cache
+from services.whatsapp_service import (
+    send_bulk_text,
+    format_event_announcement,
+    format_event_update,
+)
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
@@ -44,21 +50,19 @@ def expire_events_if_needed():
     if changed:
         _save_events(events)
 
-# Simple in-memory TTL cache for events list
-_CACHE = {"events_list": (0.0, [])}
-_EVENTS_TTL_SECONDS = 30
+# Redis-backed cache configuration
+_EVENTS_CACHE_KEY = "events:active_list"
+_EVENTS_TTL_SECONDS = 300  # 5 minutes
 
-def _cache_get(key: str):
-    ts, val = _CACHE.get(key, (0.0, None))
-    if time() - ts < _EVENTS_TTL_SECONDS:
-        return val
-    return None
+def _cache_get_events_list():
+    cached = get_cache(_EVENTS_CACHE_KEY)
+    return cached
 
-def _cache_set(key: str, val):
-    _CACHE[key] = (time(), val)
+def _cache_set_events_list(value):
+    set_cache(_EVENTS_CACHE_KEY, value, ttl_seconds=_EVENTS_TTL_SECONDS)
 
 def _cache_invalidate_events_list():
-    _CACHE["events_list"] = (0.0, [])
+    delete_cache(_EVENTS_CACHE_KEY)
 
 @router.post("/", response_model=Event)
 async def create_event(ev: CreateEventIn):
@@ -84,12 +88,21 @@ async def create_event(ev: CreateEventIn):
     events.append(new_ev)
     _save_events(events)
     _cache_invalidate_events_list()
+    # Notify all users about new event (best effort; phones must be E.164)
+    try:
+        users = read_users()
+        phones = [u.get("phone") for u in users if u.get("phone")]
+        if phones:
+            await send_bulk_text(phones, format_event_announcement(new_ev))
+    except Exception:
+        # Do not block event creation on messaging failures
+        pass
     return new_ev
 
 @router.get("/", response_model=List[Event])
 async def list_events():
-    # Cache first
-    cached = _cache_get("events_list")
+    # Cache first (Redis)
+    cached = _cache_get_events_list()
     if cached is not None:
         return cached
 
@@ -105,7 +118,7 @@ async def list_events():
         except Exception:
             # if malformed, skip
             continue
-    _cache_set("events_list", results)
+    _cache_set_events_list(results)
     return results
 
 @router.get("/recent", response_model=List[Event])
@@ -347,6 +360,20 @@ async def update_event_partial(event_id: str, event_updates: dict):
     events[event_index] = updated_event
     _save_events(events)
     _cache_invalidate_events_list()
+
+    # Notify subscribed users about update (best effort)
+    try:
+        # Subscribers are users whose subscribedEvents contains event_id
+        users = read_users()
+        subscriber_phones = [
+            u.get("phone")
+            for u in users
+            if u.get("phone") and event_id in (u.get("subscribedEvents") or [])
+        ]
+        if subscriber_phones:
+            await send_bulk_text(subscriber_phones, format_event_update(updated_event, list(event_updates.keys())))
+    except Exception:
+        pass
 
     # Return the updated event
     return {

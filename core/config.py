@@ -65,17 +65,17 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 # QR token expiry extra (seconds) - we will normally set to event end time
 QR_DEFAULT_TTL_SECONDS = 60 * 60 * 24  # fallback 24 hours
 
-# Database Pooling Configuration (Railway-friendly; optimized for high concurrency)
-DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "50"))        # Increased from 20 to 50
-DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "100")) # Increased from 20 to 100
-DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "300"))  # seconds
-DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "60"))   # Increased from 30 to 60
+# Database Pooling Configuration (optimized defaults for high concurrency)
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "100"))        # default 100
+DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "200"))   # default 200
+DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "1800"))  # 30 minutes
+DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))    # quicker failover
 DB_POOL_PRE_PING = os.getenv("DB_POOL_PRE_PING", "true").lower() == "true"
 DB_POOL_USE_LIFO = os.getenv("DB_POOL_USE_LIFO", "true").lower() == "true"
 
 # Psycopg2 connect args
-DB_CONNECT_TIMEOUT = int(os.getenv("DB_CONNECT_TIMEOUT", "10"))
-DB_STATEMENT_TIMEOUT_MS = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "30000"))
+DB_CONNECT_TIMEOUT = int(os.getenv("DB_CONNECT_TIMEOUT", "5"))
+DB_STATEMENT_TIMEOUT_MS = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "10000"))
 
 # External pooler (PgBouncer) toggle: if true, disable SQLAlchemy pooling
 USE_PGBOUNCER = os.getenv("USE_PGBOUNCER", "false").lower() == "true"

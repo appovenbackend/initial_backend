@@ -1,2 +1,2 @@
-release: python test_endpoints.py
-web: uvicorn main:app --host 0.0.0.0 --port $PORT
+release: alembic upgrade head
+web: gunicorn -c gunicorn.conf.py main:app

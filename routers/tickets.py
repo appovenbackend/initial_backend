@@ -9,51 +9,36 @@ from services.qr_service import create_qr_token
 from models.ticket import Ticket
 import json
 import logging
+from services.cache_service import get_cache, set_cache, delete_cache
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Simple in-memory cache
-_cache = {}
-_cache_ttl = {}  # To track cache expiration
 CACHE_TTL = 300  # 5 minutes
 
 def _get_cache(key: str):
-    """Get item from cache if not expired"""
-    if key in _cache and key in _cache_ttl:
-        if datetime.now().timestamp() - _cache_ttl[key] < CACHE_TTL:
-            logger.debug(f"Cache hit for key: {key}")
-            return _cache[key]
-        else:
-            # Expired, remove from cache
-            del _cache[key]
-            del _cache_ttl[key]
-    logger.debug(f"Cache miss for key: {key}")
-    return None
+    """Get item from Redis cache"""
+    data = get_cache(key)
+    if data is not None:
+        logger.debug(f"Cache hit for key: {key}")
+    else:
+        logger.debug(f"Cache miss for key: {key}")
+    return data
 
 def _set_cache(key: str, value):
-    """Set item in cache with current timestamp"""
-    _cache[key] = value
-    _cache_ttl[key] = datetime.now().timestamp()
-    logger.debug(f"Set cache for key: {key}")
+    """Set item into Redis cache"""
+    set_cache(key, value, ttl_seconds=CACHE_TTL)
 
 def _clear_cache(key: str = None):
-    """Clear specific key or entire cache"""
+    """Clear specific key or skip if None (no global flush here)"""
     if key:
-        if key in _cache:
-            del _cache[key]
-        if key in _cache_ttl:
-            del _cache_ttl[key]
+        delete_cache(key)
         logger.debug(f"Cleared cache for key: {key}")
-    else:
-        _cache.clear()
-        _cache_ttl.clear()
-        logger.debug("Cleared entire cache")
 
 router = APIRouter(prefix="", tags=["Tickets"])
 
 def _load_users():
-    cache_key = "users"
+    cache_key = "users:all"
     cached_data = _get_cache(cache_key)
     if cached_data is not None:
         return cached_data
@@ -63,10 +48,10 @@ def _load_users():
 
 def _save_users(data):
     write_users(data)
-    _clear_cache("users")  # Clear cache when data is modified
+    _clear_cache("users:all")  # Clear cache when data is modified
 
 def _load_events():
-    cache_key = "events"
+    cache_key = "events:all"
     cached_data = _get_cache(cache_key)
     if cached_data is not None:
         return cached_data
@@ -76,10 +61,10 @@ def _load_events():
 
 def _save_events(data):
     write_events(data)
-    _clear_cache("events")  # Clear cache when data is modified
+    _clear_cache("events:all")  # Clear cache when data is modified
 
 def _load_tickets():
-    cache_key = "tickets"
+    cache_key = "tickets:all"
     cached_data = _get_cache(cache_key)
     if cached_data is not None:
         return cached_data
@@ -89,10 +74,10 @@ def _load_tickets():
 
 def _save_tickets(data):
     write_tickets(data)
-    _clear_cache("tickets")  # Clear cache when data is modified
+    _clear_cache("tickets:all")  # Clear cache when data is modified
 
 def _load_received_qr_tokens():
-    cache_key = "qr_tokens"
+    cache_key = "qr_tokens:all"
     cached_data = _get_cache(cache_key)
     if cached_data is not None:
         return cached_data
@@ -102,7 +87,7 @@ def _load_received_qr_tokens():
 
 def _save_received_qr_tokens(data):
     write_received_qr_tokens(data)
-    _clear_cache("qr_tokens")  # Clear cache when data is modified
+    _clear_cache("qr_tokens:all")  # Clear cache when data is modified
 
 def _now_ist_iso():
     return datetime.now(IST).isoformat()

@@ -7,7 +7,7 @@ bind = f"{os.getenv('HOST', '0.0.0.0')}:{os.getenv('PORT', '8000')}"
 # Worker processes
 workers = int(os.getenv('WORKERS', multiprocessing.cpu_count() * 2 + 1))
 worker_class = "uvicorn.workers.UvicornWorker"
-worker_connections = 1000
+worker_connections = int(os.getenv('WORKER_CONNECTIONS', '1000'))
 
 # Restart workers after this many requests
 max_requests = int(os.getenv('MAX_REQUESTS', '10000'))
