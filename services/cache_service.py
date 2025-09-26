@@ -14,12 +14,31 @@ class CacheService:
         self._connect()
 
     def _connect(self):
-        """Connect to Redis server"""
+        """Connect to Redis server.
+        Supports REDIS_URL as either 'host:port' or full 'redis://[:password@]host:port/db'.
+        """
         try:
-            if REDIS_URL:
+            if not REDIS_URL:
+                logger.warning("Redis URL not configured, using in-memory cache")
+                self.redis_client = None
+                return
+
+            if '://' in REDIS_URL:
+                # Full URL provided (e.g., redis://default:pass@host:port/0)
+                self.redis_client = redis.from_url(
+                    REDIS_URL,
+                    password=REDIS_PASSWORD or None,
+                    decode_responses=True,
+                    socket_timeout=5,
+                    socket_connect_timeout=5,
+                    health_check_interval=30
+                )
+            else:
+                host = REDIS_URL.split(':')[0]
+                port = int(REDIS_URL.split(':')[1]) if ':' in REDIS_URL else 6379
                 self.redis_client = redis.Redis(
-                    host=REDIS_URL.split(':')[0],
-                    port=int(REDIS_URL.split(':')[1]) if ':' in REDIS_URL else 6379,
+                    host=host,
+                    port=port,
                     password=REDIS_PASSWORD,
                     db=REDIS_DB or 0,
                     decode_responses=True,
@@ -28,12 +47,10 @@ class CacheService:
                     retry_on_timeout=True,
                     health_check_interval=30
                 )
-                # Test connection
-                self.redis_client.ping()
-                logger.info("Redis connection established successfully")
-            else:
-                logger.warning("Redis URL not configured, using in-memory cache")
-                self.redis_client = None
+
+            # Test connection
+            self.redis_client.ping()
+            logger.info("Redis connection established successfully")
         except Exception as e:
             logger.error(f"Failed to connect to Redis: {e}")
             self.redis_client = None

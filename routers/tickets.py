@@ -336,9 +336,11 @@ async def get_qr_tokens_by_event(event_id: str):
     event_tokens = [t for t in received_tokens if t.get("eventId") == event_id]
     return {"qr_tokens": event_tokens, "count": len(event_tokens)}
 
+from fastapi import Request
+
 @router.post("/validate")
 @limiter.limit("120/minute")
-async def validate_token(body: dict):
+async def validate_token(body: dict, request: Request):
     """
     Expects: { "token": "<jwt>", "eventId": "<event_id>" }
     Returns user + event info on first scan, or already_scanned on second.
