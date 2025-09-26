@@ -127,11 +127,11 @@ class ReceivedQrTokenDB(Base):
     source = Column(String, nullable=True)
 
 class UserFollowDB(Base):
-    __tablename__ = "user_follows"
+    __tablename__ = "user_connections"  # renamed from user_follows
 
     id = Column(String, primary_key=True, index=True)
-    follower_id = Column(String, nullable=False, index=True)  # User who is following
-    following_id = Column(String, nullable=False, index=True)  # User being followed
+    follower_id = Column(String, nullable=False, index=True)  # requester
+    following_id = Column(String, nullable=False, index=True)  # target
     status = Column(String, nullable=False, default="pending")  # 'pending', 'accepted', 'blocked'
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)

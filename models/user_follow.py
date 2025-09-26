@@ -1,22 +1,26 @@
 from pydantic import BaseModel
 from typing import Optional
 
-class UserFollow(BaseModel):
+
+class UserConnection(BaseModel):
     id: str
-    follower_id: str  # User who is following
-    following_id: str  # User being followed
+    follower_id: str  # requester (kept for DB compatibility)
+    following_id: str  # target (kept for DB compatibility)
     status: str  # 'pending', 'accepted', 'blocked'
     created_at: str
     updated_at: str
 
-class FollowRequest(BaseModel):
-    follower_id: str
-    following_id: str
 
-class FollowResponse(BaseModel):
+class ConnectionRequest(BaseModel):
+    requester_id: str
+    target_id: str
+
+
+class ConnectionResponse(BaseModel):
     success: bool
     message: str
-    status: Optional[str] = None  # 'following', 'pending', 'accepted'
+    status: Optional[str] = None  # 'pending', 'accepted'
+
 
 class UserProfileResponse(BaseModel):
     id: str
@@ -24,9 +28,8 @@ class UserProfileResponse(BaseModel):
     picture: Optional[str] = None
     bio: Optional[str] = None
     is_private: bool = False
-    follower_count: int = 0
-    following_count: int = 0
-    # Only show these for followers/friends
+    connections_count: int = 0
+    # Only show these for connected users
     phone: Optional[str] = None
     email: Optional[str] = None
     strava_link: Optional[str] = None
@@ -34,11 +37,11 @@ class UserProfileResponse(BaseModel):
     subscribed_events: Optional[list] = None
     created_at: str
     # Relationship status
-    is_following: bool = False
-    is_followed_by: bool = False
-    follow_status: Optional[str] = None  # 'pending', 'accepted', 'blocked'
+    is_connected: bool = False
+    connection_status: Optional[str] = None  # 'pending', 'accepted'
 
-class FollowRequestItem(BaseModel):
+
+class ConnectionRequestItem(BaseModel):
     id: str
-    follower: UserProfileResponse
+    requester: UserProfileResponse
     created_at: str
