@@ -341,22 +341,42 @@ async def get_user_connections(
         if f['follower_id'] == user_id:
             connection_user_ids.add(f['following_id'])
 
-    followers = []
+    connections = []
     for cid in connection_user_ids:
         cu = next((u for u in users if u['id'] == cid), None)
         if cu:
-            followers.append(_build_profile_response(cu, current_user_id, follows))
+            connections.append(_build_profile_response(cu, current_user_id, follows))
 
-    return {"connections": followers, "count": len(followers)}
+    return {"connections": connections, "count": len(connections)}
 
-@router.get("/users/{user_id}/connections/mine")
+@router.get("/connections")
 async def get_my_connections(
-    user_id: str,
     request: Request,
     x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
 ):
-    """Alias endpoint to return the same connections list for compatibility."""
-    return await get_user_connections(user_id, request)
+    """Get current user's connections (accepted, either direction)."""
+    current_user_id = get_current_user(request)
+
+    users = _load_users()
+    follows = _load_user_follows()
+
+    # Collect accepted connections (both directions) for current user
+    connection_user_ids = set()
+    for f in follows:
+        if f['status'] != 'accepted':
+            continue
+        if f['following_id'] == current_user_id:
+            connection_user_ids.add(f['follower_id'])
+        if f['follower_id'] == current_user_id:
+            connection_user_ids.add(f['following_id'])
+
+    connections = []
+    for cid in connection_user_ids:
+        cu = next((u for u in users if u['id'] == cid), None)
+        if cu:
+            connections.append(_build_profile_response(cu, current_user_id, follows))
+
+    return {"connections": connections, "count": len(connections)}
 
 @router.get("/feed")
 async def get_activity_feed(
