@@ -83,7 +83,8 @@ async def create_event(ev: CreateEventIn):
         organizerLogo=ev.organizerLogo,
         coordinate_lat=ev.coordinate_lat,
         coordinate_long=ev.coordinate_long,
-        address_url=ev.address_url
+        address_url=ev.address_url,
+        registration_link=ev.registration_link
     ).dict()
 
     # Save only the new event (write_events now handles upsert)
@@ -360,6 +361,14 @@ async def update_event_partial(event_id: str, event_updates: dict):
             validation_errors.append("address_url must be a valid URL string or null")
         else:
             updated_event["address_url"] = address_url
+
+    # Validate registration_link if provided
+    if "registration_link" in event_updates:
+        registration_link = event_updates["registration_link"]
+        if registration_link is not None and (not isinstance(registration_link, str) or not registration_link.strip()):
+            validation_errors.append("registration_link must be a valid URL string or null")
+        else:
+            updated_event["registration_link"] = registration_link
 
     # Check for validation errors
     if validation_errors:

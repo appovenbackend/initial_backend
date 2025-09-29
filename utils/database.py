@@ -103,6 +103,7 @@ class EventDB(Base):
     coordinate_lat = Column(String, nullable=True)
     coordinate_long = Column(String, nullable=True)
     address_url = Column(String, nullable=True)
+    registration_link = Column(String, nullable=True)
 
 class TicketDB(Base):
     __tablename__ = "tickets"
@@ -307,7 +308,8 @@ def write_events(data):
                         'organizerLogo': event_data.get('organizerLogo', 'https://example.com/default-logo.png'),
                         'coordinate_lat': event_data.get('coordinate_lat'),
                         'coordinate_long': event_data.get('coordinate_long'),
-                        'address_url': event_data.get('address_url')
+                        'address_url': event_data.get('address_url'),
+                        'registration_link': event_data.get('registration_link')
                     }
                     # Remove None values for required fields
                     filtered_data = {k: v for k, v in filtered_data.items() if v is not None}

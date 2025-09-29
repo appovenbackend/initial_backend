@@ -16,6 +16,7 @@ class CreateEventIn(BaseModel):
     coordinate_lat: Optional[str] = None
     coordinate_long: Optional[str] = None
     address_url: Optional[str] = None
+    registration_link: Optional[str] = None
 
 class Event(BaseModel):
     id: str
@@ -34,3 +35,4 @@ class Event(BaseModel):
     coordinate_lat: Optional[str] = None
     coordinate_long: Optional[str] = None
     address_url: Optional[str] = None
+    registration_link: Optional[str] = None
