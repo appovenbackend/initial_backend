@@ -1,0 +1,104 @@
+from fastapi import APIRouter, HTTPException
+from sqlalchemy import create_engine, text
+from core.config import DATABASE_URL
+import os
+
+router = APIRouter(prefix="/migration", tags=["Migration"])
+
+@router.post("/fix-registration-link")
+async def fix_registration_link_column():
+    """
+    Manually add the registration_link column to the events table.
+    This endpoint can be called to fix the production database issue.
+    """
+
+    if not DATABASE_URL:
+        raise HTTPException(
+            status_code=500,
+            detail="DATABASE_URL environment variable not set"
+        )
+
+    try:
+        # Create engine
+        engine = create_engine(DATABASE_URL)
+
+        with engine.connect() as conn:
+            # Check if column already exists
+            result = conn.execute(text("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'events' AND column_name = 'registration_link';
+            """))
+
+            if result.fetchone():
+                return {
+                    "message": "registration_link column already exists",
+                    "status": "already_fixed"
+                }
+
+            # Add the missing column
+            conn.execute(text("ALTER TABLE events ADD COLUMN registration_link VARCHAR;"))
+            conn.commit()
+
+            # Verify the column was added
+            result = conn.execute(text("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'events' AND column_name = 'registration_link';
+            """))
+
+            if result.fetchone():
+                return {
+                    "message": "registration_link column added successfully",
+                    "status": "fixed"
+                }
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to verify column addition"
+                )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database error: {str(e)}"
+        )
+
+@router.get("/status")
+async def get_migration_status():
+    """
+    Check the current status of the database migration.
+    """
+
+    if not DATABASE_URL:
+        raise HTTPException(
+            status_code=500,
+            detail="DATABASE_URL environment variable not set"
+        )
+
+    try:
+        engine = create_engine(DATABASE_URL)
+
+        with engine.connect() as conn:
+            # Check if column exists
+            result = conn.execute(text("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'events' AND column_name = 'registration_link';
+            """))
+
+            column_exists = result.fetchone() is not None
+
+            return {
+                "registration_link_column_exists": column_exists,
+                "database_url_configured": True,
+                "status": "ready" if column_exists else "needs_fix"
+            }
+
+    except Exception as e:
+        return {
+            "registration_link_column_exists": False,
+            "database_url_configured": True,
+            "error": str(e),
+            "status": "error"
+        }
