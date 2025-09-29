@@ -1,7 +1,7 @@
 """Add registration_link column to events table
 
 Revision ID: 5_add_registration_link_to_events
-Revises: 4_user_connections_table
+Revises: 4_user_connections
 Create Date: 2025-09-29
 
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = '5_add_registration_link_to_events'
-down_revision = '4_user_connections_table'
+down_revision = '4_user_connections'
 branch_labels = None
 depends_on = None
 
