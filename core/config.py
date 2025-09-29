@@ -65,11 +65,11 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 # QR token expiry extra (seconds) - we will normally set to event end time
 QR_DEFAULT_TTL_SECONDS = 60 * 60 * 24  # fallback 24 hours
 
-# Database Pooling Configuration (optimized for Railway PostgreSQL)
-DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "20"))         # Reduced for Railway
-DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "30"))   # Reduced for Railway
-DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "300"))  # 5 minutes for Railway
-DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))   # 30 seconds timeout
+# Database Pooling Configuration (optimized defaults for high concurrency)
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "100"))        # default 100
+DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "200"))   # default 200
+DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "1800"))  # 30 minutes
+DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))    # quicker failover
 DB_POOL_PRE_PING = os.getenv("DB_POOL_PRE_PING", "true").lower() == "true"
 DB_POOL_USE_LIFO = os.getenv("DB_POOL_USE_LIFO", "true").lower() == "true"
 
