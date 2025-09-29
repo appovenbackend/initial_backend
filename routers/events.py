@@ -16,6 +16,13 @@ from services.whatsapp_service import (
     format_event_announcement,
     format_event_update,
 )
+from services.featured_events_service import (
+    get_featured_events,
+    set_featured_events,
+    add_featured_event,
+    remove_featured_event,
+    is_event_featured,
+)
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
@@ -84,8 +91,7 @@ async def create_event(ev: CreateEventIn):
         coordinate_lat=ev.coordinate_lat,
         coordinate_long=ev.coordinate_long,
         address_url=ev.address_url,
-        registration_link=ev.registration_link,
-        isFeatured=ev.isFeatured if ev.isFeatured is not None else False
+        registration_link=ev.registration_link
     ).dict()
 
     # Save only the new event (write_events now handles upsert)
@@ -423,76 +429,116 @@ async def deactivate_event(event_id: str):
     _cache_invalidate_events_list()
     return {"message": "Event deactivated successfully"}
 
+# Featured Events Endpoints
 @router.get("/featured", response_model=List[Event])
-async def get_featured_events():
+async def get_featured_events_list():
     """
-    Get up to 2 featured events.
-    Returns active future events that are marked as featured.
+    Get the 2 featured events.
+    Returns up to 2 events that are currently set as featured.
     """
-    events = _load_events()
-    now = _now_ist()
-    featured_events = []
+    try:
+        featured_events_data = get_featured_events()
 
-    for e in events:
-        try:
-            end = _to_ist(e["endAt"])
-            is_active = e.get("isActive", True)
-            is_featured = e.get("isFeatured", False)
-            end_in_future = end > now
+        # Convert to Event models
+        featured_events = []
+        for event_data in featured_events_data:
+            try:
+                featured_events.append(Event(**event_data))
+            except Exception as e:
+                print(f"Error converting featured event {event_data.get('id', 'unknown')}: {e}")
+                continue
 
-            if is_active and end_in_future and is_featured:
-                featured_events.append(Event(**e))
+        return featured_events
 
-                # Limit to 2 featured events
-                if len(featured_events) >= 2:
-                    break
-
-        except Exception as exc:
-            print(f"DEBUG: ✗ Error processing event {e.get('title', 'Unknown')}: {exc}")
-            continue
-
-    return featured_events
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get featured events: {str(e)}")
 
 @router.post("/featured")
-async def set_featured_events(event_ids: List[str]):
+async def set_featured_events_list(event_ids: List[str]):
     """
-    Set which events should be featured.
-    Accepts a list of up to 2 event IDs to mark as featured.
-    All other events will be unmarked as featured.
+    Set 2 events as featured.
+    Accepts a list of event IDs and stores the first 2 valid ones as featured.
     """
-    if len(event_ids) > 2:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot feature more than 2 events at a time"
-        )
+    try:
+        if not isinstance(event_ids, list):
+            raise HTTPException(status_code=400, detail="event_ids must be a list")
 
-    # Validate event IDs exist
-    events = _load_events()
-    existing_event_ids = {e["id"] for e in events}
+        if len(event_ids) == 0:
+            raise HTTPException(status_code=400, detail="At least one event ID is required")
 
-    for event_id in event_ids:
-        if event_id not in existing_event_ids:
+        # Validate event IDs exist
+        all_events = _load_events()
+        existing_ids = {event.get('id') for event in all_events}
+
+        invalid_ids = [eid for eid in event_ids if eid not in existing_ids]
+        if invalid_ids:
             raise HTTPException(
-                status_code=404,
-                detail=f"Event with ID {event_id} not found"
+                status_code=400,
+                detail=f"Invalid event IDs: {invalid_ids}. These events do not exist."
             )
 
-    # First, unmark all events as featured
-    for e in events:
-        e["isFeatured"] = False
+        # Set featured events (takes first 2)
+        success = set_featured_events(event_ids)
 
-    # Then mark the specified events as featured
-    for event_id in event_ids:
-        for e in events:
-            if e["id"] == event_id:
-                e["isFeatured"] = True
-                break
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to set featured events")
 
-    # Save all events with updated featured status
-    _save_events(events)
-    _cache_invalidate_events_list()
+        # Get the actual featured events for response
+        featured_events_data = get_featured_events()
+        featured_events = [Event(**event_data) for event_data in featured_events_data]
 
-    return {
-        "message": f"Successfully set {len(event_ids)} featured events",
-        "featured_event_ids": event_ids
-    }
+        return {
+            "message": f"Successfully set {len(featured_events)} events as featured",
+            "featured_events": featured_events,
+            "featured_event_ids": event_ids[:2]  # Show which IDs were actually set
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to set featured events: {str(e)}")
+
+@router.post("/featured/{event_id}")
+async def toggle_featured_event(event_id: str):
+    """
+    Add or remove a single event from featured list.
+    If event is already featured, it will be removed.
+    If event is not featured, it will be added (maintaining max 2 featured events).
+    """
+    try:
+        # Check if event exists
+        all_events = _load_events()
+        event_exists = any(event.get('id') == event_id for event in all_events)
+
+        if not event_exists:
+            raise HTTPException(status_code=404, detail="Event not found")
+
+        # Check if currently featured
+        currently_featured = is_event_featured(event_id)
+
+        if currently_featured:
+            # Remove from featured
+            success = remove_featured_event(event_id)
+            action = "removed from"
+        else:
+            # Add to featured
+            success = add_featured_event(event_id)
+            action = "added to"
+
+        if not success:
+            raise HTTPException(status_code=500, detail=f"Failed to {action.strip()} featured events")
+
+        # Get updated featured events
+        featured_events_data = get_featured_events()
+        featured_events = [Event(**event_data) for event_data in featured_events_data]
+
+        return {
+            "message": f"Event {event_id} {action} featured events",
+            "currently_featured": not currently_featured,
+            "featured_events": featured_events
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to toggle featured event: {str(e)}")
