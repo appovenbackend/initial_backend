@@ -84,7 +84,8 @@ async def create_event(ev: CreateEventIn):
         coordinate_lat=ev.coordinate_lat,
         coordinate_long=ev.coordinate_long,
         address_url=ev.address_url,
-        registration_link=ev.registration_link
+        registration_link=ev.registration_link,
+        isFeatured=ev.isFeatured if ev.isFeatured is not None else False
     ).dict()
 
     # Save only the new event (write_events now handles upsert)
@@ -421,3 +422,77 @@ async def deactivate_event(event_id: str):
     _save_events(events)  # Pass all events for update
     _cache_invalidate_events_list()
     return {"message": "Event deactivated successfully"}
+
+@router.get("/featured", response_model=List[Event])
+async def get_featured_events():
+    """
+    Get up to 2 featured events.
+    Returns active future events that are marked as featured.
+    """
+    events = _load_events()
+    now = _now_ist()
+    featured_events = []
+
+    for e in events:
+        try:
+            end = _to_ist(e["endAt"])
+            is_active = e.get("isActive", True)
+            is_featured = e.get("isFeatured", False)
+            end_in_future = end > now
+
+            if is_active and end_in_future and is_featured:
+                featured_events.append(Event(**e))
+
+                # Limit to 2 featured events
+                if len(featured_events) >= 2:
+                    break
+
+        except Exception as exc:
+            print(f"DEBUG: ✗ Error processing event {e.get('title', 'Unknown')}: {exc}")
+            continue
+
+    return featured_events
+
+@router.post("/featured")
+async def set_featured_events(event_ids: List[str]):
+    """
+    Set which events should be featured.
+    Accepts a list of up to 2 event IDs to mark as featured.
+    All other events will be unmarked as featured.
+    """
+    if len(event_ids) > 2:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot feature more than 2 events at a time"
+        )
+
+    # Validate event IDs exist
+    events = _load_events()
+    existing_event_ids = {e["id"] for e in events}
+
+    for event_id in event_ids:
+        if event_id not in existing_event_ids:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Event with ID {event_id} not found"
+            )
+
+    # First, unmark all events as featured
+    for e in events:
+        e["isFeatured"] = False
+
+    # Then mark the specified events as featured
+    for event_id in event_ids:
+        for e in events:
+            if e["id"] == event_id:
+                e["isFeatured"] = True
+                break
+
+    # Save all events with updated featured status
+    _save_events(events)
+    _cache_invalidate_events_list()
+
+    return {
+        "message": f"Successfully set {len(event_ids)} featured events",
+        "featured_event_ids": event_ids
+    }
