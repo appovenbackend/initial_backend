@@ -115,7 +115,11 @@ def _build_profile_response(user: dict, viewer_id: str = None, connections: list
     return response
 
 @router.get("/users/{user_id}", response_model=UserProfileResponse)
-async def get_user_profile(user_id: str, request: Request):
+async def get_user_profile(
+    user_id: str,
+    request: Request,
+    x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
+):
     """Get user profile with privacy controls"""
     current_user_id = get_current_user(request)
 
@@ -128,7 +132,12 @@ async def get_user_profile(user_id: str, request: Request):
     return _build_profile_response(user, current_user_id, follows)
 
 @router.put("/users/{user_id}/privacy")
-async def update_privacy_setting(user_id: str, is_private: bool, request: Request):
+async def update_privacy_setting(
+    user_id: str,
+    is_private: bool,
+    request: Request,
+    x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
+):
     """Toggle account privacy setting"""
     current_user_id = get_current_user(request)
 
@@ -196,7 +205,11 @@ async def request_connection(
     return ConnectionResponse(success=True, message=message, status=status)
 
 @router.delete("/users/{user_id}/disconnect")
-async def disconnect_user(user_id: str, request: Request):
+async def disconnect_user(
+    user_id: str,
+    request: Request,
+    x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
+):
     """Remove a connection or pending request."""
     current_user_id = get_current_user(request)
 
@@ -217,7 +230,10 @@ async def disconnect_user(user_id: str, request: Request):
     return {"message": "Connection removed"}
 
 @router.get("/connection-requests", response_model=List[ConnectionRequestItem])
-async def get_follow_requests(request: Request):
+async def get_follow_requests(
+    request: Request,
+    x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
+):
     """Get pending connection requests for current user"""
     current_user_id = get_current_user(request)
 
@@ -240,7 +256,11 @@ async def get_follow_requests(request: Request):
     return result
 
 @router.post("/connection-requests/{request_id}/accept")
-async def accept_follow_request(request_id: str, request: Request):
+async def accept_follow_request(
+    request_id: str,
+    request: Request,
+    x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
+):
     """Accept a connection request"""
     current_user_id = get_current_user(request)
 
@@ -266,7 +286,11 @@ async def accept_follow_request(request_id: str, request: Request):
     return {"message": "Connection request accepted"}
 
 @router.post("/connection-requests/{request_id}/decline")
-async def decline_follow_request(request_id: str, request: Request):
+async def decline_follow_request(
+    request_id: str,
+    request: Request,
+    x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
+):
     """Decline a connection request"""
     current_user_id = get_current_user(request)
 
@@ -288,7 +312,11 @@ async def decline_follow_request(request_id: str, request: Request):
     return {"message": "Connection request declined"}
 
 @router.get("/users/{user_id}/connections")
-async def get_user_connections(user_id: str, request: Request):
+async def get_user_connections(
+    user_id: str,
+    request: Request,
+    x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
+):
     """Get user's connections (accepted, either direction)."""
     current_user_id = get_current_user(request)
 
@@ -322,12 +350,20 @@ async def get_user_connections(user_id: str, request: Request):
     return {"connections": followers, "count": len(followers)}
 
 @router.get("/users/{user_id}/connections/mine")
-async def get_my_connections(user_id: str, request: Request):
+async def get_my_connections(
+    user_id: str,
+    request: Request,
+    x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
+):
     """Alias endpoint to return the same connections list for compatibility."""
     return await get_user_connections(user_id, request)
 
 @router.get("/feed")
-async def get_activity_feed(request: Request, limit: int = 20):
+async def get_activity_feed(
+    request: Request,
+    limit: int = 20,
+    x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
+):
     """Get activity feed from followed users"""
     current_user_id = get_current_user(request)
 
@@ -391,7 +427,12 @@ async def admin_notify_event_subscribers(event_id: str, message: str):
     return {"sent": sent, "total": len(phones)}
 
 @router.get("/users/search")
-async def search_users(q: str, request: Request, limit: int = 10):
+async def search_users(
+    q: str,
+    request: Request,
+    limit: int = 10,
+    x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
+):
     """Search users by name"""
     current_user_id = get_current_user(request)
 
