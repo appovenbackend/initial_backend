@@ -105,8 +105,9 @@ def _build_profile_response(user: dict, viewer_id: str = None, connections: list
 
         # Add private info only if viewer can see it
         if _can_view_profile(viewer_id, user, connections):
-            response.phone = user.get('phone')
-            response.email = user.get('email')
+            # Phone and email are hidden for privacy - remove these lines:
+            # response.phone = user.get('phone')
+            # response.email = user.get('email')
             response.strava_link = user.get('strava_link')
             response.instagram_id = user.get('instagram_id')
             response.subscribed_events = user.get('subscribedEvents', [])

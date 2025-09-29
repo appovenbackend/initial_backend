@@ -29,9 +29,9 @@ class UserProfileResponse(BaseModel):
     bio: Optional[str] = None
     is_private: bool = False
     connections_count: int = 0
-    # Only show these for connected users
-    phone: Optional[str] = None
-    email: Optional[str] = None
+    # Only show these for connected users (hidden phone/email for now)
+    # phone: Optional[str] = None  # Hidden for privacy
+    # email: Optional[str] = None  # Hidden for privacy
     strava_link: Optional[str] = None
     instagram_id: Optional[str] = None
     subscribed_events: Optional[list] = None
