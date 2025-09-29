@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Header
 from uuid import uuid4
 from datetime import datetime
 from typing import List, Optional
@@ -146,9 +146,13 @@ async def update_privacy_setting(user_id: str, is_private: bool, request: Reques
     return {"message": f"Account set to {'private' if is_private else 'public'}", "is_private": is_private}
 
 @router.post("/users/{user_id}/connect", response_model=ConnectionResponse)
-async def request_connection(user_id: str, request: Request):
+async def request_connection(
+    user_id: str,
+    request: Request,
+    x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
+):
     """Request a connection; if target is public, auto-accept."""
-    current_user_id = get_current_user(request)
+    current_user_id = x_user_id  # Use the header parameter directly
 
     if current_user_id == user_id:
         raise HTTPException(status_code=400, detail="Cannot connect to yourself")
