@@ -115,7 +115,8 @@ async def list_events():
     # Cache first (Redis)
     cached = _cache_get_events_list()
     if cached is not None:
-        return cached
+        # Convert cached dicts back to Event objects
+        return [Event(**event_dict) for event_dict in cached]
 
     expire_events_if_needed()
     events = _load_events()
@@ -144,7 +145,8 @@ async def list_events():
             continue
 
     print(f"DEBUG: Returning {len(results)} active future events")
-    _cache_set_events_list(results)
+    # Cache as dictionaries, not Event objects
+    _cache_set_events_list([event.dict() for event in results])
     return results
 
 @router.get("/recent", response_model=List[Event])
