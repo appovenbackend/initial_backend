@@ -1,3 +1,4 @@
+import math
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -13,7 +14,7 @@ class UserUpdate(BaseModel):
     strava_link: Optional[str] = None
     instagram_id: Optional[str] = None
     picture: Optional[str] = None
-    
+
 
 class User(BaseModel):
     id: str
@@ -29,3 +30,20 @@ class User(BaseModel):
     subscribedEvents: List[str] = []
     is_private: bool = False
     createdAt: str
+
+
+class UserPoints(BaseModel):
+    """Legacy points tracking system"""
+    id: str  # user_id
+    total_points: int = 0
+    transaction_history: List[dict] = []  # [{"type": "earned/spent", "points": int, "reason": str, "timestamp": str}]
+
+    @staticmethod
+    def calculate_points(event_price_inr: float) -> int:
+        """Calculate points based on event type"""
+        if event_price_inr <= 0:
+            # Free event
+            return 2
+        else:
+            # Paid event: ceil(price/100) + 2
+            return math.ceil(event_price_inr / 100) + 2

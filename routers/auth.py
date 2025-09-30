@@ -244,3 +244,17 @@ async def google_callback(request: Request):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Google login failed: {str(e)}")
+
+@router.get("/points")
+async def get_user_points(request: Request, x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")):
+    """Get user points for display"""
+    from utils.database import get_user_points
+
+    points_data = get_user_points(x_user_id)
+
+    # Return user-friendly format
+    return {
+        "user_id": points_data["id"],
+        "total_points": points_data["total_points"],
+        "point_history": points_data["transaction_history"]
+    }

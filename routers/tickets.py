@@ -196,6 +196,16 @@ async def register_free(payload: dict):
     tickets = existing_tickets
     tickets.append(new_ticket)
     _save_tickets(tickets)
+
+    # Award legacy points for free event registration
+    from models.user import UserPoints
+    points_to_award = UserPoints.calculate_points(ev["priceINR"])
+    from utils.database import award_points_to_user
+    if award_points_to_user(userId, points_to_award, f"Free registration for event: {ev['title']}"):
+        print(f"✅ Awarded {points_to_award} points to user {userId}")
+    else:
+        print(f"❌ Failed to award points to user {userId}")
+
     return new_ticket
 
 @router.post("/payments/verify", response_model=Ticket)
