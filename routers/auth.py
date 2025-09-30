@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, Header
 from uuid import uuid4
 from datetime import datetime, timedelta
 from utils.database import read_users, write_users
