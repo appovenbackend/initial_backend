@@ -47,6 +47,7 @@ def _to_ist(dt_iso: str):
 @router.post("/order")
 @limiter.limit("10/minute")
 async def create_payment_order(
+    request: Request,
     phone: str = Query(..., description="User phone number"),
     eventId: str = Query(..., alias="eventId", description="Event ID")
 ):
