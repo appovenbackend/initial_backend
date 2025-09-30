@@ -45,7 +45,8 @@ def _to_ist(dt_iso: str):
     return dt.astimezone(IST)
 
 @router.post("/order")
-@limiter.limit("10/minute")
+# Temporarily remove rate limiter to test if it's causing TaskGroup errors
+# @limiter.limit("10/minute")
 async def create_payment_order(request: Request, phone: str = None, eventId: str = None):
     """
     Create a Razorpay order for event payment.
@@ -100,8 +101,8 @@ async def create_payment_order(request: Request, phone: str = None, eventId: str
             "status": order_data["status"]
         }
 
-    except Exception as e:
-        error_msg = f"Failed to create Razorpay order: {str(e)}"
+    except (Exception, BaseException) as e:
+        error_msg = f"Failed to create Razorpay order: {str(e)} ({type(e).__name__})"
         logger.error(error_msg, exc_info=True)
         raise HTTPException(status_code=500, detail="Payment service temporarily unavailable. Please try again.")
 
