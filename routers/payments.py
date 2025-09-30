@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request, Depends, Query
 from uuid import uuid4
 from datetime import datetime, timedelta
 import hmac
@@ -46,15 +46,17 @@ def _to_ist(dt_iso: str):
 
 @router.post("/order")
 @limiter.limit("10/minute")
-async def create_payment_order(request: Request, payload: dict):
+async def create_payment_order(
+    phone: str = Query(..., description="User phone number"),
+    eventId: str = Query(..., alias="eventId", description="Event ID")
+):
     """
     Create a Razorpay order for event payment.
 
-    payload: { "phone": "...", "eventId": "..." }
+    Query params: phone, eventId
     Returns: { "order_id": "...", "key_id": "...", "amount": 50000, "currency": "INR" }
     """
-    phone = payload.get("phone")
-    event_id = payload.get("eventId")
+    event_id = eventId  # normalize variable name
 
     if not phone or not event_id:
         raise HTTPException(status_code=400, detail="phone and eventId required")

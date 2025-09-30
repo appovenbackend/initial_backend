@@ -11,7 +11,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from routers import auth, events, tickets, payments
+from routers import auth, events, tickets, payments, social
 from core.config import SECRET_KEY, IST
 from utils.database import read_events, write_events, get_database_session
 from core.config import USE_POSTGRESQL, DATABASE_URL
@@ -82,6 +82,7 @@ app.include_router(auth.router)
 app.include_router(events.router)
 app.include_router(tickets.router)
 app.include_router(payments.router)
+app.include_router(social.router)
 
 # Ensure uploads directory exists
 os.makedirs("uploads", exist_ok=True)
