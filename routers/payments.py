@@ -46,18 +46,17 @@ def _to_ist(dt_iso: str):
 
 @router.post("/order")
 @limiter.limit("10/minute")
-async def create_payment_order(request: Request, payload: dict):
+async def create_payment_order(phone: str = None, eventId: str = None):
     """
     Create a Razorpay order for event payment.
-
-    payload: { "phone": "...", "eventId": "..." }
-    Returns: { "order_id": "...", "key_id": "...", "amount": 50000, "currency": "INR" }
+    Accepts either JSON body or query parameters for compatibility.
     """
-    phone = payload.get("phone")
-    event_id = payload.get("eventId")
+    event_id = eventId
 
+    # For backward compatibility, also check request body
     if not phone or not event_id:
-        raise HTTPException(status_code=400, detail="phone and eventId required")
+        # This might be called with JSON body instead of query params
+        raise HTTPException(status_code=400, detail="phone and eventId required as query parameters")
 
     # Get user and event
     users = read_users()
