@@ -45,50 +45,36 @@ def _to_ist(dt_iso: str):
     return dt.astimezone(IST)
 
 @router.post("/order")
-# Temporarily remove rate limiter to test if it's causing TaskGroup errors
-# @limiter.limit("10/minute")
-async def create_payment_order(request: Request, phone: str = None, eventId: str = None):
+@limiter.limit("10/minute")
+async def create_payment_order(request: Request, payload: dict):
     """
     Create a Razorpay order for event payment.
-    Accepts query parameters for phone and eventId.
+
+    payload: { "phone": "...", "eventId": "..." }
+    Returns: { "order_id": "...", "key_id": "...", "amount": 50000, "currency": "INR" }
     """
-    event_id = eventId
+    phone = payload.get("phone")
+    event_id = payload.get("eventId")
 
     if not phone or not event_id:
-        raise HTTPException(status_code=400, detail="phone and eventId required as query parameters")
+        raise HTTPException(status_code=400, detail="phone and eventId required")
 
     # Get user and event
+    users = read_users()
+    user = next((u for u in users if u["phone"] == phone), None)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    events = read_events()
+    event = next((e for e in events if e["id"] == event_id), None)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if event.get("priceINR", 0) == 0:
+        raise HTTPException(status_code=400, detail="Event is free")
+
+    # Create Razorpay order
     try:
-        users = read_users()
-        logger.info(f"Found {len(users)} users in database")
-
-        user = next((u for u in users if u["phone"] == phone), None)
-        if not user:
-            logger.warning(f"User not found for phone: {phone}")
-            raise HTTPException(status_code=404, detail="User not found")
-
-        events = read_events()
-        logger.info(f"Found {len(events)} events in database")
-
-        event = next((e for e in events if e["id"] == event_id), None)
-        if not event:
-            logger.warning(f"Event not found for ID: {event_id}")
-            raise HTTPException(status_code=404, detail="Event not found")
-
-        event_price = event.get("priceINR", 0)
-        logger.info(f"Event {event_id} has price: {event_price} INR")
-
-        if event_price == 0:
-            raise HTTPException(status_code=400, detail="Event is free")
-
-    except Exception as db_error:
-        logger.error(f"Database error: {str(db_error)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Database error occurred")
-
-    # Create Razorpay order with extended error handling
-    try:
-        logger.info(f"Creating Razorpay order for user {user['id']}, event {event_id}, amount {event.get('priceINR', 0)} INR")
-
         order_data = await razorpay_create_order(
             event_id=event_id,
             amount_inr=event.get("priceINR", 0),
@@ -105,7 +91,7 @@ async def create_payment_order(request: Request, phone: str = None, eventId: str
             "status": "created"
         }
 
-        logger.info(f"Payment order created successfully: {order_id}")
+        logger.info(f"Payment order created: {order_id} for user {user['id']}, event {event_id}")
 
         return {
             "order_id": order_id,
@@ -115,10 +101,9 @@ async def create_payment_order(request: Request, phone: str = None, eventId: str
             "status": order_data["status"]
         }
 
-    except (Exception, BaseException) as e:
-        error_msg = f"Failed to create Razorpay order: {str(e)} ({type(e).__name__})"
-        logger.error(error_msg, exc_info=True)
-        raise HTTPException(status_code=500, detail="Payment service temporarily unavailable. Please try again.")
+    except Exception as e:
+        logger.error(f"Failed to create payment order: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create payment order")
 
 @router.post("/verify")
 @limiter.limit("20/minute")
@@ -318,10 +303,8 @@ async def razorpay_webhook(request: Request):
                     write_tickets(tickets)
 
                     # Award legacy points for paid event registration via webhook
-                    # order_info["amount"] is in paise, convert to INR for points calculation
-                    amount_inr = order_info["amount"] // 100
                     from models.user import UserPoints
-                    points_to_award = UserPoints.calculate_points(amount_inr)
+                    points_to_award = UserPoints.calculate_points(order_info["amount"])
                     from utils.database import award_points_to_user
                     if award_points_to_user(user_id, points_to_award, f"Webhook payment for event (auto-created ticket)"):
                         logger.info(f"✅ Awarded {points_to_award} points to user {user_id}")
