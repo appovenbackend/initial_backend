@@ -70,8 +70,10 @@ async def create_payment_order(request: Request, phone: str = None, eventId: str
     if event.get("priceINR", 0) == 0:
         raise HTTPException(status_code=400, detail="Event is free")
 
-    # Create Razorpay order
+    # Create Razorpay order with extended error handling
     try:
+        logger.info(f"Creating Razorpay order for user {user['id']}, event {event_id}, amount {event.get('priceINR', 0)} INR")
+
         order_data = await razorpay_create_order(
             event_id=event_id,
             amount_inr=event.get("priceINR", 0),
@@ -88,7 +90,7 @@ async def create_payment_order(request: Request, phone: str = None, eventId: str
             "status": "created"
         }
 
-        logger.info(f"Payment order created: {order_id} for user {user['id']}, event {event_id}")
+        logger.info(f"Payment order created successfully: {order_id}")
 
         return {
             "order_id": order_id,
@@ -99,8 +101,9 @@ async def create_payment_order(request: Request, phone: str = None, eventId: str
         }
 
     except Exception as e:
-        logger.error(f"Failed to create payment order: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to create payment order")
+        error_msg = f"Failed to create Razorpay order: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        raise HTTPException(status_code=500, detail="Payment service temporarily unavailable. Please try again.")
 
 @router.post("/verify")
 @limiter.limit("20/minute")
@@ -300,8 +303,10 @@ async def razorpay_webhook(request: Request):
                     write_tickets(tickets)
 
                     # Award legacy points for paid event registration via webhook
+                    # order_info["amount"] is in paise, convert to INR for points calculation
+                    amount_inr = order_info["amount"] // 100
                     from models.user import UserPoints
-                    points_to_award = UserPoints.calculate_points(order_info["amount"])
+                    points_to_award = UserPoints.calculate_points(amount_inr)
                     from utils.database import award_points_to_user
                     if award_points_to_user(user_id, points_to_award, f"Webhook payment for event (auto-created ticket)"):
                         logger.info(f"✅ Awarded {points_to_award} points to user {user_id}")
