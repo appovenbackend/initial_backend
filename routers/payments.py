@@ -58,18 +58,32 @@ async def create_payment_order(request: Request, phone: str = None, eventId: str
         raise HTTPException(status_code=400, detail="phone and eventId required as query parameters")
 
     # Get user and event
-    users = read_users()
-    user = next((u for u in users if u["phone"] == phone), None)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        users = read_users()
+        logger.info(f"Found {len(users)} users in database")
 
-    events = read_events()
-    event = next((e for e in events if e["id"] == event_id), None)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
+        user = next((u for u in users if u["phone"] == phone), None)
+        if not user:
+            logger.warning(f"User not found for phone: {phone}")
+            raise HTTPException(status_code=404, detail="User not found")
 
-    if event.get("priceINR", 0) == 0:
-        raise HTTPException(status_code=400, detail="Event is free")
+        events = read_events()
+        logger.info(f"Found {len(events)} events in database")
+
+        event = next((e for e in events if e["id"] == event_id), None)
+        if not event:
+            logger.warning(f"Event not found for ID: {event_id}")
+            raise HTTPException(status_code=404, detail="Event not found")
+
+        event_price = event.get("priceINR", 0)
+        logger.info(f"Event {event_id} has price: {event_price} INR")
+
+        if event_price == 0:
+            raise HTTPException(status_code=400, detail="Event is free")
+
+    except Exception as db_error:
+        logger.error(f"Database error: {str(db_error)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Database error occurred")
 
     # Create Razorpay order with extended error handling
     try:
