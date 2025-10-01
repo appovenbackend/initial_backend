@@ -82,6 +82,7 @@ class UserDB(Base):
     strava_link = Column(String, nullable=True)
     instagram_id = Column(String, nullable=True)
     is_private = Column(Boolean, default=False)
+    password = Column(String, nullable=True)
     createdAt = Column(String, nullable=False)
 
 class EventDB(Base):

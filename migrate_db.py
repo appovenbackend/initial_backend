@@ -214,6 +214,15 @@ def migrate_users_table():
             else:
                 print("ℹ️  is_private column already exists")
 
+            # Add password column for authentication
+            if 'password' not in existing_columns:
+                print("📝 Adding password column to users...")
+                conn.execute(text('ALTER TABLE users ADD COLUMN password VARCHAR'))
+                conn.commit()
+                print("✅ Added password column")
+            else:
+                print("ℹ️  password column already exists")
+
         print("🎉 Users table migration completed!")
     except Exception as e:
         print(f"❌ Users migration failed: {e}")
