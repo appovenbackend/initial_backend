@@ -15,6 +15,29 @@ class UserUpdate(BaseModel):
     instagram_id: Optional[str] = None
     picture: Optional[str] = None
 
+class UserSignup(BaseModel):
+    phone: str
+    name: str
+    otp: str
+    password: Optional[str] = None
+
+class UserLogin(BaseModel):
+    phone: str
+    password: Optional[str] = None
+    otp: Optional[str] = None
+
+class OtpRequest(BaseModel):
+    phone: str
+    purpose: str  # "signup", "login", "reset"
+
+class OtpVerify(BaseModel):
+    phone: str
+    otp: str
+
+class PasswordReset(BaseModel):
+    phone: str
+    otp: str
+    new_password: str
 
 class User(BaseModel):
     id: str
@@ -29,6 +52,7 @@ class User(BaseModel):
     instagram_id: Optional[str] = None
     subscribedEvents: List[str] = []
     is_private: bool = False
+    password: Optional[str] = None  # Hashed password
     createdAt: str
 
 

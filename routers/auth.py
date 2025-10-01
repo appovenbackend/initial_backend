@@ -3,13 +3,95 @@ from uuid import uuid4
 from datetime import datetime, timedelta
 from utils.database import read_users, write_users
 from core.config import IST, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SECRET_KEY, ALGORITHM
-from models.user import UserIn, User, UserUpdate
+from models.user import UserIn, User, UserUpdate, UserSignup, UserLogin, OtpRequest, OtpVerify, PasswordReset
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 import os
 import shutil
 from pathlib import Path
 from jose import jwt
+import random
+from passlib.context import CryptContext
+from services.whatsapp_service import send_whatsapp_text
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# OTP Storage: {phone: {"otp": str, "purpose": str, "expiry": datetime}}
+otp_store = {}
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def generate_otp():
+    return ''.join([str(random.randint(0, 9)) for _ in range(6)])
+
+def send_otp_message(phone: str, otp: str, purpose: str):
+    """Send OTP via WhatsApp with purpose-specific message."""
+    messages = {
+        "signup": f"Your signup verification code: {otp}. Valid for 5 minutes.",
+        "login": f"Your login verification code: {otp}. Valid for 5 minutes.",
+        "reset": f"Your password reset code: {otp}. Valid for 5 minutes."
+    }
+    message = messages.get(purpose, f"Your verification code: {otp}")
+    phone_e164 = normalize_phone(phone)
+    success = send_whatsapp_text(phone_e164, message)
+    return success
+
+def store_otp(phone: str, otp: str, purpose: str):
+    """Store OTP with 5-minute expiry."""
+    expiry = datetime.now(IST) + timedelta(minutes=5)
+    otp_store[phone] = {
+        "otp": otp,
+        "purpose": purpose,
+        "expiry": expiry
+    }
+
+def verify_otp(phone: str, otp: str, expected_purpose: str = None):
+    """Verify OTP and return True if valid and matching purpose."""
+    if phone not in otp_store:
+        return False
+
+    stored = otp_store[phone]
+    if datetime.now(IST) > stored["expiry"]:
+        # Delete expired
+        del otp_store[phone]
+        return False
+
+    if stored["otp"] != otp:
+        return False
+
+    if expected_purpose and stored["purpose"] != expected_purpose:
+        return False
+
+    # OTP used, delete it
+    del otp_store[phone]
+    return True
+
+# Clean up expired OTPs periodically (simple implementation)
+def cleanup_expired_otps():
+    now = datetime.now(IST)
+    expired_phones = [phone for phone, data in otp_store.items() if now > data["expiry"]]
+    for phone in expired_phones:
+        del otp_store[phone]
+
+def normalize_phone(phone: str) -> str:
+    """Normalize phone number to E.164 format (+91xxxxxxxxx for India)."""
+    phone = phone.strip().replace(" ", "").replace("-", "")
+
+    if phone.startswith('+'):
+        return phone  # Already has country code
+    elif phone.startswith('91') and len(phone) == 12:
+        return '+' + phone
+    elif len(phone) == 10:
+        # Assume Indian 10-digit number
+        return '+91' + phone
+    else:
+        # Assume already has country code without +
+        return '+' + phone
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -40,54 +122,166 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-@router.post("/login")
-async def login(user_in: UserIn):
-    try:
+@router.post("/send-otp")
+async def send_otp(request: OtpRequest):
+    """Send OTP via WhatsApp for signup, login, or password reset."""
+    cleanup_expired_otps()
+
+    # Validate purpose
+    if request.purpose not in ["signup", "login", "reset"]:
+        raise HTTPException(status_code=400, detail="Invalid purpose. Must be 'signup', 'login', or 'reset'")
+
+    # Normalize phone for lookups
+    normalized_phone = normalize_phone(request.phone)
+
+    # Check if phone already exists for signup
+    if request.purpose == "signup":
         users = _load_users()
-
-        # Check if user already exists with this phone number
-        existing_user = next((u for u in users if u["phone"] == user_in.phone), None)
-
+        existing_user = next((u for u in users if normalize_phone(u["phone"]) == normalized_phone), None)
         if existing_user:
-            # User exists, return existing user info
-            access_token = create_access_token(data={"sub": existing_user["id"]})
-            return {
-                "msg": "login_successful",
-                "userId": existing_user["id"],
-                "name": existing_user["name"],
-                "phone": existing_user["phone"],
-                "email": existing_user.get("email"),
-                "bio": existing_user.get("bio"),
-                "strava_link": existing_user.get("strava_link"),
-                "instagram_id": existing_user.get("instagram_id"),
-                "picture": existing_user.get("picture"),
-                "createdAt": existing_user["createdAt"],
-                "access_token": access_token,
-                "token_type": "bearer"
-            }
+            raise HTTPException(status_code=400, detail="Phone number already registered. Please login instead")
 
-        # User doesn't exist, create new user
-        new_user = User(
-            id="u_" + uuid4().hex[:10],
-            name=user_in.name,
-            phone=user_in.phone,
-            role="user",
-            createdAt=datetime.now(IST).isoformat()
-        ).dict()
-        users.append(new_user)
-        _save_users(users)
-        access_token = create_access_token(data={"sub": new_user["id"]})
+    # Check if phone exists for login/reset
+    if request.purpose in ["login", "reset"]:
+        users = _load_users()
+        existing_user = next((u for u in users if normalize_phone(u["phone"]) == normalized_phone), None)
+        if not existing_user:
+            raise HTTPException(status_code=404, detail="No account found with this phone number")
+
+    # Generate and store OTP
+    otp = generate_otp()
+    store_otp(request.phone, otp, request.purpose)
+
+    # Send via WhatsApp
+    success = await send_otp_message(request.phone, otp, request.purpose)
+    if not success:
+        del otp_store[request.phone]  # Remove if send failed
+        raise HTTPException(status_code=500, detail="Failed to send OTP via WhatsApp")
+
+    return {"message": "OTP sent successfully via WhatsApp"}
+
+@router.post("/signup")
+async def signup(user_data: UserSignup):
+    """Signup with OTP verification."""
+    cleanup_expired_otps()
+
+    # Normalize phone number
+    normalized_phone = normalize_phone(user_data.phone)
+
+    # Verify OTP
+    if not verify_otp(normalized_phone, user_data.otp, "signup"):
+        raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+
+    # Check if user already exists
+    users = _load_users()
+    existing_user = next((u for u in users if normalize_phone(u["phone"]) == normalized_phone), None)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Phone number already registered")
+
+    # Hash password if provided
+    hashed_password = None
+    if user_data.password:
+        hashed_password = get_password_hash(user_data.password)
+
+    # Create new user
+    new_user = User(
+        id="u_" + uuid4().hex[:10],
+        name=user_data.name,
+        phone=normalized_phone,
+        password=hashed_password,
+        role="user",
+        createdAt=datetime.now(IST).isoformat()
+    ).dict()
+
+    users.append(new_user)
+    _save_users(users)
+
+    access_token = create_access_token(data={"sub": new_user["id"]})
+    return {
+        "msg": "registered",
+        "userId": new_user["id"],
+        "name": new_user["name"],
+        "phone": new_user["phone"],
+        "createdAt": new_user["createdAt"],
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
+
+@router.post("/login")
+async def login(user_data: UserLogin):
+    """Login with password OR OTP depending on user state."""
+    try:
+        # Normalize phone for lookups
+        normalized_phone = normalize_phone(user_data.phone)
+
+        users = _load_users()
+        existing_user = next((u for u in users if normalize_phone(u["phone"]) == normalized_phone), None)
+
+        if not existing_user:
+            raise HTTPException(status_code=404, detail="No account found with this phone number")
+
+        # If user has password and provided password, verify password
+        if existing_user.get("password") and user_data.password:
+            if not verify_password(user_data.password, existing_user["password"]):
+                raise HTTPException(status_code=401, detail="Invalid password")
+        # If user has no password or provided OTP, verify OTP
+        elif user_data.otp:
+            cleanup_expired_otps()
+            if not verify_otp(normalized_phone, user_data.otp, "login"):
+                raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+        else:
+            raise HTTPException(status_code=400, detail="Password or OTP required for login")
+
+        access_token = create_access_token(data={"sub": existing_user["id"]})
         return {
-            "msg": "registered",
-            "userId": new_user["id"],
-            "name": new_user["name"],
-            "phone": new_user["phone"],
-            "createdAt": new_user["createdAt"],
+            "msg": "login_successful",
+            "userId": existing_user["id"],
+            "name": existing_user["name"],
+            "phone": existing_user["phone"],
+            "email": existing_user.get("email"),
+            "bio": existing_user.get("bio"),
+            "strava_link": existing_user.get("strava_link"),
+            "instagram_id": existing_user.get("instagram_id"),
+            "picture": existing_user.get("picture"),
+            "createdAt": existing_user["createdAt"],
             "access_token": access_token,
             "token_type": "bearer"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
+
+@router.post("/forgot-password")
+async def forgot_password(request: OtpRequest):
+    """Send OTP for password reset."""
+    if request.purpose != "reset":
+        raise HTTPException(status_code=400, detail="Purpose must be 'reset'")
+    # Reuse send_otp logic
+    return await send_otp(request)
+
+@router.post("/reset-password")
+async def reset_password(data: PasswordReset):
+    """Reset password after OTP verification."""
+    cleanup_expired_otps()
+
+    # Normalize phone
+    normalized_phone = normalize_phone(data.phone)
+
+    # Verify OTP
+    if not verify_otp(normalized_phone, data.otp, "reset"):
+        raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+
+    # Update user password
+    users = _load_users()
+    existing_user = next((u for u in users if normalize_phone(u["phone"]) == normalized_phone), None)
+    if not existing_user:
+        raise HTTPException(status_code=404, detail="No account found with this phone number")
+
+    existing_user["password"] = get_password_hash(data.new_password)
+    _save_users(users)
+
+    return {"message": "Password reset successfully"}
 
 @router.get("/users")
 async def get_all_users():
