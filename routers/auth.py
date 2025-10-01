@@ -46,8 +46,9 @@ async def register(user_register: UserRegister):
         if existing_email:
             raise HTTPException(status_code=400, detail="Email already registered")
 
-        # Create new user with hashed password
-        hashed_password = hash_password(user_register.password)
+        # Create new user with hashed password (bcrypt limits to 72 bytes)
+        password_to_hash = user_register.password[:72] if len(user_register.password.encode('utf-8')) > 72 else user_register.password
+        hashed_password = hash_password(password_to_hash)
         new_user = User(
             id="u_" + uuid4().hex[:10],
             name=user_register.name,
@@ -94,8 +95,9 @@ async def login(user_login: UserLogin):
         if not user.get("password"):
             raise HTTPException(status_code=401, detail="User not found. Please register first.")
 
-        # Verify password
-        if not verify_password(user_login.password, user["password"]):
+        # Verify password (bcrypt limits to 72 bytes, so truncate if needed)
+        password_to_verify = user_login.password[:72] if len(user_login.password.encode('utf-8')) > 72 else user_login.password
+        if not verify_password(password_to_verify, user["password"]):
             raise HTTPException(status_code=401, detail="Invalid password")
 
         # Create access token
