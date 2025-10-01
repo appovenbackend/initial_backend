@@ -185,16 +185,26 @@ async def request_connection(
         elif existing['status'] == 'pending':
             raise HTTPException(status_code=400, detail="Connection request already pending")
 
+    # DEBUG: Log privacy status and connection logic
+    print(f"DEBUG: Connection request from {current_user_id} to {user_id}")
+    print(f"DEBUG: Target user is_private field: {target_user.get('is_private')}")
+    print(f"DEBUG: Target user keys: {list(target_user.keys())}")
+
     # Create follow relationship
     now = _now_ist()
+    connection_status = 'accepted' if not target_user.get('is_private', False) else 'pending'
+    print(f"DEBUG: Calculated connection status: {connection_status}")
+
     new_follow = {
         'id': f"conn_{uuid4().hex[:10]}",
         'follower_id': current_user_id,
         'following_id': user_id,
-        'status': 'accepted' if not target_user.get('is_private', False) else 'pending',
+        'status': connection_status,
         'created_at': now,
         'updated_at': now
     }
+
+    print(f"DEBUG: New follow object: {new_follow}")
 
     follows.append(new_follow)
     _save_user_follows(follows)
