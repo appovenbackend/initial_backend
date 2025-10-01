@@ -5,9 +5,9 @@ import json
 from typing import List
 import os
 
-# Get the directory of this service file and build the path relative to it
-SERVICE_DIR = os.path.dirname(os.path.abspath(__file__))
-FEATURED_EVENTS_FILE = os.path.join(SERVICE_DIR, "data", "featured_events.json")
+# Get the parent directory (initial_backend) and build the path to data folder
+INITIAL_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FEATURED_EVENTS_FILE = os.path.join(INITIAL_BACKEND_DIR, "data", "featured_events.json")
 
 def _load_featured_slots() -> dict:
     """Load featured event slots from file."""
