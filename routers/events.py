@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from uuid import uuid4
 from datetime import datetime, timedelta
 from dateutil import parser
@@ -507,7 +507,7 @@ async def update_featured_slots(slots_update: dict):
     }
 
 @router.put("/featured/slots/{slot}")
-async def set_specific_featured_slot(slot: str, event_id: str = None):
+async def set_specific_featured_slot(slot: str, event_id: str = Query(None)):
     """
     Set a specific featured slot to an event ID.
     slot must be 'featured_1' or 'featured_2'.
