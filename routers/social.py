@@ -134,25 +134,21 @@ async def get_user_profile(
 @router.put("/users/{user_id}/privacy")
 async def update_privacy_setting(
     user_id: str,
-    is_private: bool,
     request: Request,
-    x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
 ):
-    """Toggle account privacy setting"""
-    current_user_id = get_current_user(request)
-
-    if current_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Can only update your own privacy settings")
+    
 
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user['is_private'] = is_private
+    # Toggle the privacy setting
+    user['is_private'] = not user.get('is_private', False)
     _save_users(users)
 
-    return {"message": f"Account set to {'private' if is_private else 'public'}", "is_private": is_private}
+    new_state = user['is_private']
+    return {"message": f"Account toggled to {'private' if new_state else 'public'}", "is_private": new_state}
 
 @router.post("/users/{user_id}/connect", response_model=ConnectionResponse)
 async def request_connection(
