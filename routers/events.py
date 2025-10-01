@@ -22,6 +22,10 @@ from services.featured_events_service import (
     add_featured_event,
     remove_featured_event,
     is_event_featured,
+    set_featured_slot,
+    get_featured_slot,
+    clear_featured_slot,
+    get_featured_slots,
 )
 
 router = APIRouter(prefix="/events", tags=["Events"])
@@ -431,7 +435,129 @@ async def deactivate_event(event_id: str):
     _cache_invalidate_events_list()
     return {"message": "Event deactivated successfully"}
 
-# Featured Events Endpoints
+# New Featured Slot Management Endpoints
+@router.get("/featured/slots")
+async def get_featured_slots_status():
+    """
+    Get the current status of featured event slots.
+    Returns the event IDs currently assigned to featured_1 and featured_2.
+    """
+    slots = get_featured_slots()
+
+    # Get event details for non-null slots
+    all_events = _load_events()
+    enriched_slots = {}
+
+    for slot_name, event_id in slots.items():
+        if event_id:
+            event = next((e for e in all_events if e['id'] == event_id), None)
+            if event:
+                enriched_slots[slot_name] = {
+                    'event_id': event_id,
+                    'event_title': event.get('title'),
+                    'event_city': event.get('city'),
+                    'event_start': event.get('startAt')
+                }
+            else:
+                # Event not found, clear the slot
+                clear_featured_slot(slot_name)
+                enriched_slots[slot_name] = None
+        else:
+            enriched_slots[slot_name] = None
+
+    return {"slots": enriched_slots}
+
+@router.put("/featured/slots")
+async def update_featured_slots(slots_update: dict):
+    """
+    Update one or both featured slots.
+    Body should contain "featured_1" and/or "featured_2" with event IDs or null.
+    """
+    allowed_slots = {'featured_1', 'featured_2'}
+
+    # Validate only allowed slots are provided
+    invalid_keys = set(slots_update.keys()) - allowed_slots
+    if invalid_keys:
+        raise HTTPException(status_code=400, detail=f"Invalid slot names: {list(invalid_keys)}. Only 'featured_1' and 'featured_2' are allowed.")
+
+    # Validate event IDs exist if provided
+    all_events = _load_events()
+    existing_ids = {event.get('id') for event in all_events}
+
+    updated_slots = []
+
+    for slot, event_id in slots_update.items():
+        if event_id is not None:
+            if event_id not in existing_ids:
+                raise HTTPException(status_code=400, detail=f"Event ID '{event_id}' does not exist for slot '{slot}'")
+
+        # Update the slot
+        success = set_featured_slot(slot, event_id)
+        if not success:
+            raise HTTPException(status_code=500, detail=f"Failed to update slot '{slot}'")
+
+        updated_slots.append(slot)
+
+    # Get updated slots status
+    updated_status = await get_featured_slots_status()
+
+    return {
+        "message": f"Updated slots: {', '.join(updated_slots)}",
+        "slots": updated_status["slots"]
+    }
+
+@router.put("/featured/slots/{slot}")
+async def set_specific_featured_slot(slot: str, event_id: str = None):
+    """
+    Set a specific featured slot to an event ID.
+    slot must be 'featured_1' or 'featured_2'.
+    event_id: provide event ID to set, null to clear.
+    """
+    if slot not in ['featured_1', 'featured_2']:
+        raise HTTPException(status_code=400, detail="Invalid slot name. Must be 'featured_1' or 'featured_2'")
+
+    # Validate event ID if provided
+    if event_id is not None:
+        all_events = _load_events()
+        event_exists = any(event.get('id') == event_id for event in all_events)
+        if not event_exists:
+            raise HTTPException(status_code=400, detail=f"Event ID '{event_id}' does not exist")
+
+    # Update the slot
+    success = set_featured_slot(slot, event_id)
+    if not success:
+        raise HTTPException(status_code=500, detail=f"Failed to update slot '{slot}'")
+
+    # Get updated slots status
+    updated_status = await get_featured_slots_status()
+
+    return {
+        "message": f"Slot '{slot}' updated to event ID '{event_id}'",
+        "slots": updated_status["slots"]
+    }
+
+@router.delete("/featured/slots/{slot}")
+async def clear_specific_featured_slot(slot: str):
+    """
+    Clear a specific featured slot.
+    slot must be 'featured_1' or 'featured_2'.
+    """
+    if slot not in ['featured_1', 'featured_2']:
+        raise HTTPException(status_code=400, detail="Invalid slot name. Must be 'featured_1' or 'featured_2'")
+
+    success = clear_featured_slot(slot)
+    if not success:
+        raise HTTPException(status_code=500, detail=f"Failed to clear slot '{slot}'")
+
+    # Get updated slots status
+    updated_status = await get_featured_slots_status()
+
+    return {
+        "message": f"Slot '{slot}' cleared",
+        "slots": updated_status["slots"]
+    }
+
+# Featured Events Endpoints (existing, kept for backward compatibility)
 @router.get("/featured", response_model=List[Event])
 async def get_featured_events_list():
     """

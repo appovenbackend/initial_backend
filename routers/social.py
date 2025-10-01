@@ -136,7 +136,11 @@ async def update_privacy_setting(
     user_id: str,
     request: Request,
 ):
-    
+    """Toggle the user's account privacy setting"""
+    current_user_id = get_current_user(request)
+
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Can only toggle your own privacy settings")
 
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)

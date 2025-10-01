@@ -1,110 +1,141 @@
 """
-Featured Events Service
-Simple service to manage 2 featured event IDs without modifying existing schemas.
+Simple service to manage 2 featured event IDs as separate slots.
 """
-
 import json
-import os
-from typing import List, Optional
-from utils.database import read_events
+from typing import List
 
-# File to store featured event IDs
-FEATURED_EVENTS_FILE = "data/featured_events.json"
+FEATURED_EVENTS_FILE = "initial_backend/data/featured_events.json"
 
-def _load_featured_events() -> List[str]:
-    """Load featured event IDs from file."""
+def _load_featured_slots() -> dict:
+    """Load featured event slots from file."""
     try:
-        if os.path.exists(FEATURED_EVENTS_FILE):
-            with open(FEATURED_EVENTS_FILE, 'r') as f:
-                data = json.load(f)
-                return data.get('featured_event_ids', [])
-    except Exception:
-        pass
-    return []
+        with open(FEATURED_EVENTS_FILE, 'r') as f:
+            data = json.load(f)
+            # Default structure
+            return data.get('slots', {"featured_1": None, "featured_2": None})
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"featured_1": None, "featured_2": None}
 
-def _save_featured_events(event_ids: List[str]) -> None:
-    """Save featured event IDs to file."""
+def _save_featured_slots(slots: dict) -> None:
+    """Save featured event slots to file."""
     try:
-        os.makedirs("data", exist_ok=True)
         with open(FEATURED_EVENTS_FILE, 'w') as f:
-            json.dump({'featured_event_ids': event_ids}, f, indent=2)
-    except Exception:
-        pass
+            json.dump({'slots': slots}, f, indent=2)
+    except Exception as e:
+        print(f"Failed to save featured slots: {e}")
 
 def get_featured_events() -> List[dict]:
     """
-    Get the 2 featured events.
+    Get the featured events from both slots.
     Returns up to 2 events that are currently set as featured.
     """
-    featured_ids = _load_featured_events()
+    from utils.database import read_events
+    slots = _load_featured_slots()
 
-    if not featured_ids:
-        return []
-
-    # Get all events
+    # Load all events
     all_events = read_events()
-
-    # Find featured events
     featured_events = []
-    for event in all_events:
-        if event.get('id') in featured_ids:
+
+    # Check featured_1
+    if slots.get('featured_1'):
+        event = next((e for e in all_events if e['id'] == slots['featured_1']), None)
+        if event:
             featured_events.append(event)
-            if len(featured_events) >= 2:  # Only return up to 2
-                break
+
+    # Check featured_2
+    if slots.get('featured_2'):
+        event = next((e for e in all_events if e['id'] == slots['featured_2']), None)
+        if event:
+            featured_events.append(event)
 
     return featured_events
 
-def set_featured_events(event_ids: List[str]) -> bool:
+def set_featured_slot(slot: str, event_id: str = None) -> bool:
     """
-    Set 2 events as featured.
-    Accepts a list of event IDs and stores the first 2 as featured.
+    Set a specific featured slot to an event ID.
+    slot should be 'featured_1' or 'featured_2'.
+    Pass None to clear the slot.
     """
-    if not isinstance(event_ids, list):
+    if slot not in ['featured_1', 'featured_2']:
         return False
 
-    # Validate event IDs exist
-    all_events = read_events()
-    existing_ids = {event.get('id') for event in all_events}
+    slots = _load_featured_slots()
+    slots[slot] = event_id
+    _save_featured_slots(slots)
+    return True
 
-    # Filter to only existing event IDs and take first 2
-    valid_ids = [eid for eid in event_ids if eid in existing_ids][:2]
+def get_featured_slot(slot: str) -> str:
+    """
+    Get the event ID for a specific slot.
+    """
+    if slot not in ['featured_1', 'featured_2']:
+        return None
 
-    # Save the featured event IDs
-    _save_featured_events(valid_ids)
+    slots = _load_featured_slots()
+    return slots.get(slot)
+
+def clear_featured_slot(slot: str) -> bool:
+    """
+    Clear a specific featured slot.
+    """
+    return set_featured_slot(slot, None)
+
+def get_featured_slots() -> dict:
+    """
+    Get all featured slots.
+    """
+    return _load_featured_slots()
+
+# Backward compatibility functions
+def set_featured_events(event_ids: List[str]) -> bool:
+    """
+    Set featured events from a list (backward compatibility).
+    Takes up to 2 event IDs.
+    """
+    event_ids = event_ids[:2] if event_ids else []
+    slots = _load_featured_slots()
+
+    slots['featured_1'] = event_ids[0] if len(event_ids) > 0 else None
+    slots['featured_2'] = event_ids[1] if len(event_ids) > 1 else None
+
+    _save_featured_slots(slots)
     return True
 
 def add_featured_event(event_id: str) -> bool:
     """
-    Add a single event to featured list.
-    Maintains only 2 featured events maximum.
+    Add event to first available slot or replace featured_2.
     """
-    featured_ids = _load_featured_events()
+    slots = _load_featured_slots()
 
-    # Remove if already exists
-    if event_id in featured_ids:
-        featured_ids.remove(event_id)
+    if not slots['featured_1']:
+        slots['featured_1'] = event_id
+    else:
+        slots['featured_2'] = event_id
 
-    # Add to front and keep only 2
-    featured_ids.insert(0, event_id)
-    featured_ids = featured_ids[:2]
-
-    _save_featured_events(featured_ids)
+    _save_featured_slots(slots)
     return True
 
 def remove_featured_event(event_id: str) -> bool:
     """
-    Remove an event from featured list.
+    Remove event from any featured slot.
     """
-    featured_ids = _load_featured_events()
+    slots = _load_featured_slots()
+    modified = False
 
-    if event_id in featured_ids:
-        featured_ids.remove(event_id)
-        _save_featured_events(featured_ids)
-        return True
+    if slots['featured_1'] == event_id:
+        slots['featured_1'] = None
+        modified = True
 
-    return False
+    if slots['featured_2'] == event_id:
+        slots['featured_2'] = None
+        modified = True
+
+    if modified:
+        _save_featured_slots(slots)
+
+    return modified
 
 def is_event_featured(event_id: str) -> bool:
     """Check if an event is currently featured."""
-    featured_ids = _load_featured_events()
-    return event_id in featured_ids
+    slots = _load_featured_slots()
+    return event_id in [slots['featured_1'], slots['featured_2']] and event_id is not None
