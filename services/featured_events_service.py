@@ -3,8 +3,11 @@ Simple service to manage 2 featured event IDs as separate slots.
 """
 import json
 from typing import List
+import os
 
-FEATURED_EVENTS_FILE = "initial_backend/data/featured_events.json"
+# Get the directory of this service file and build the path relative to it
+SERVICE_DIR = os.path.dirname(os.path.abspath(__file__))
+FEATURED_EVENTS_FILE = os.path.join(SERVICE_DIR, "data", "featured_events.json")
 
 def _load_featured_slots() -> dict:
     """Load featured event slots from file."""
