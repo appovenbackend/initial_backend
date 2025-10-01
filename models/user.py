@@ -21,10 +21,15 @@ class UserSignup(BaseModel):
     otp: str
     password: Optional[str] = None
 
+class UserRegister(BaseModel):
+    name: str
+    phone: str
+    email: str
+    password: str
+
 class UserLogin(BaseModel):
     phone: str
-    password: Optional[str] = None
-    otp: Optional[str] = None
+    password: str
 
 class OtpRequest(BaseModel):
     phone: str
