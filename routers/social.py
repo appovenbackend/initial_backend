@@ -132,6 +132,23 @@ async def get_user_profile(
     follows = _load_user_follows()
     return _build_profile_response(user, current_user_id, follows)
 
+@router.get("/users/{user_id}/privacy")
+async def get_privacy_setting(
+    user_id: str,
+    request: Request,
+    x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
+):
+    """Get the current privacy setting for a user"""
+    current_user_id = x_user_id  # Use the header parameter directly
+
+    users = _load_users()
+    user = next((u for u in users if u['id'] == user_id), None)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    is_private = bool(user.get('is_private', False))
+    return {"user_id": user_id, "is_private": is_private}
+
 @router.put("/users/{user_id}/privacy")
 async def update_privacy_setting(
     user_id: str,
