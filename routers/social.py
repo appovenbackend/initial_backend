@@ -65,7 +65,8 @@ def _get_relationship_status(current_user_id: str, target_user_id: str, connecti
 
 def _can_view_profile(viewer_id: str, target_user: dict, connections: list) -> bool:
     """Check if viewer can see target's full profile"""
-    if not target_user.get('is_private', False):
+    is_private = bool(target_user.get('is_private', False))
+    if not is_private:
         return True  # Public profile
 
     # Check if there is an accepted connection (either direction)
@@ -185,15 +186,12 @@ async def request_connection(
         elif existing['status'] == 'pending':
             raise HTTPException(status_code=400, detail="Connection request already pending")
 
-    # DEBUG: Log privacy status and connection logic
-    print(f"DEBUG: Connection request from {current_user_id} to {user_id}")
-    print(f"DEBUG: Target user is_private field: {target_user.get('is_private')}")
-    print(f"DEBUG: Target user keys: {list(target_user.keys())}")
+    # Check privacy status more carefully with explicit boolean conversion
+    is_private = bool(target_user.get('is_private', False))
 
     # Create follow relationship
     now = _now_ist()
-    connection_status = 'accepted' if not target_user.get('is_private', False) else 'pending'
-    print(f"DEBUG: Calculated connection status: {connection_status}")
+    connection_status = 'accepted' if not is_private else 'pending'
 
     new_follow = {
         'id': f"conn_{uuid4().hex[:10]}",
@@ -203,8 +201,6 @@ async def request_connection(
         'created_at': now,
         'updated_at': now
     }
-
-    print(f"DEBUG: New follow object: {new_follow}")
 
     follows.append(new_follow)
     _save_user_follows(follows)
