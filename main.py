@@ -1,6 +1,6 @@
 import os
 import logging
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +16,9 @@ from core.config import SECRET_KEY, IST
 from utils.database import read_events, write_events, get_database_session
 from core.config import USE_POSTGRESQL, DATABASE_URL
 from services.cache_service import get_cache, set_cache, is_cache_healthy
+from services.audit_service import audit_service, AuditSeverity
+from core.rate_limits import get_rate_limit_config
+from middleware.security_middleware import create_security_middleware
 from datetime import datetime, timedelta
 import uvicorn
 import asyncio
@@ -77,6 +80,9 @@ app.add_middleware(
 
 # Add session middleware for OAuth
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+
+# Add security middleware for audit logging and monitoring
+app.add_middleware(create_security_middleware)
 
 app.include_router(auth.router)
 app.include_router(events.router)
@@ -238,12 +244,212 @@ async def clear_cache(request: Request):
     try:
         from services.cache_service import clear_cache_pattern
         cleared_count = clear_cache_pattern("*")
+
+        # Audit admin action
+        user_id = request.headers.get("X-User-ID")
+        client_ip = request.client.host if request.client else "unknown"
+        audit_service.log_admin_action(
+            admin_user_id=user_id or "system",
+            action="cache_clear",
+            target="all_cache",
+            ip_address=client_ip,
+            details={"cleared_entries": cleared_count}
+        )
+
         return {"message": f"Cleared {cleared_count} cache entries"}
     except Exception as e:
         logger.error(f"Cache clear error: {e}")
         return JSONResponse(
             status_code=500,
             content={"error": "Failed to clear cache", "details": str(e)}
+        )
+
+@app.get("/admin/audit-logs")
+@limiter.limit("20/minute")
+async def get_audit_logs(
+    request: Request,
+    limit: int = 100,
+    offset: int = 0,
+    event_type: str = None,
+    severity: str = None,
+    user_id: str = None
+):
+    """Get audit logs (admin endpoint)"""
+    try:
+        # Check admin permissions
+        current_user_id = request.headers.get("X-User-ID")
+        if not current_user_id:
+            raise HTTPException(status_code=401, detail="Authentication required")
+
+        from services.auth_service import auth_service, Permission
+        if not auth_service.has_permission(current_user_id, Permission.VIEW_AUDIT_LOGS):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        # Query audit events from database
+        db = get_database_session()
+
+        # Build query dynamically based on filters
+        query = "SELECT * FROM audit_events WHERE 1=1"
+        params = []
+
+        if event_type:
+            query += " AND event_type = ?"
+            params.append(event_type)
+
+        if severity:
+            query += " AND severity = ?"
+            params.append(severity)
+
+        if user_id:
+            query += " AND user_id = ?"
+            params.append(user_id)
+
+        query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        from sqlalchemy import text
+        result = db.execute(text(query), params)
+        rows = result.fetchall()
+        db.close()
+
+        # Convert to list of dictionaries
+        audit_events = []
+        for row in rows:
+            audit_events.append({
+                "id": row[0],
+                "timestamp": row[1],
+                "event_type": row[2],
+                "severity": row[3],
+                "user_id": row[4],
+                "ip_address": row[5],
+                "endpoint": row[6],
+                "message": row[7],
+                "details": row[8],
+                "status_code": row[9],
+                "error_message": row[10]
+            })
+
+        # Audit the admin action
+        client_ip = request.client.host if request.client else "unknown"
+        audit_service.log_admin_action(
+            admin_user_id=current_user_id,
+            action="view_audit_logs",
+            target="audit_logs",
+            ip_address=client_ip,
+            details={
+                "filters": {"event_type": event_type, "severity": severity, "user_id": user_id},
+                "limit": limit,
+                "offset": offset,
+                "results_count": len(audit_events)
+            }
+        )
+
+        return {
+            "audit_events": audit_events,
+            "total": len(audit_events),
+            "filters_applied": {
+                "event_type": event_type,
+                "severity": severity,
+                "user_id": user_id
+            },
+            "pagination": {
+                "limit": limit,
+                "offset": offset
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Audit logs retrieval error: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to retrieve audit logs", "details": str(e)}
+        )
+
+@app.get("/admin/security-events")
+@limiter.limit("30/minute")
+async def get_security_events(
+    request: Request,
+    limit: int = 50,
+    hours: int = 24
+):
+    """Get recent security events (admin endpoint)"""
+    try:
+        # Check admin permissions
+        current_user_id = request.headers.get("X-User-ID")
+        if not current_user_id:
+            raise HTTPException(status_code=401, detail="Authentication required")
+
+        from services.auth_service import auth_service, Permission
+        if not auth_service.has_permission(current_user_id, Permission.VIEW_AUDIT_LOGS):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        # Query security events from database
+        db = get_database_session()
+
+        # Calculate time threshold
+        from datetime import datetime, timedelta
+        time_threshold = (datetime.now() - timedelta(hours=hours)).isoformat()
+
+        query = """
+            SELECT * FROM audit_events
+            WHERE event_type = 'security'
+            AND timestamp > ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """
+
+        from sqlalchemy import text
+        result = db.execute(text(query), (time_threshold, limit))
+        rows = result.fetchall()
+        db.close()
+
+        # Convert to list of dictionaries
+        security_events = []
+        for row in rows:
+            security_events.append({
+                "id": row[0],
+                "timestamp": row[1],
+                "event_type": row[2],
+                "severity": row[3],
+                "user_id": row[4],
+                "ip_address": row[5],
+                "endpoint": row[6],
+                "message": row[7],
+                "details": row[8],
+                "status_code": row[9],
+                "error_message": row[10]
+            })
+
+        # Audit the admin action
+        client_ip = request.client.host if request.client else "unknown"
+        audit_service.log_admin_action(
+            admin_user_id=current_user_id,
+            action="view_security_events",
+            target="security_events",
+            ip_address=client_ip,
+            details={
+                "time_window_hours": hours,
+                "limit": limit,
+                "results_count": len(security_events)
+            }
+        )
+
+        return {
+            "security_events": security_events,
+            "total": len(security_events),
+            "time_window_hours": hours,
+            "generated_at": datetime.now(IST).isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Security events retrieval error: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to retrieve security events", "details": str(e)}
         )
 
 if __name__ == "__main__":

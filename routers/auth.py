@@ -7,12 +7,19 @@ from core.security import hash_password, verify_password, create_access_token
 from models.user import UserIn, User, UserUpdate, UserRegister, UserLogin
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 import os
 import shutil
 from pathlib import Path
 from jose import jwt
+from services.audit_service import audit_service, AuditEventType, AuditSeverity
+from services.auth_service import auth_service
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+# Rate limiter for auth endpoints
+limiter = Limiter(key_func=get_remote_address)
 
 # OAuth Config
 config = Config(environ=os.environ)
@@ -32,18 +39,37 @@ def _save_users(data):
     write_users(data)
 
 @router.post("/register")
-async def register(user_register: UserRegister):
+@limiter.limit("5/minute")
+async def register(request: Request, user_register: UserRegister):
+    client_ip = request.client.host if request.client else "unknown"
+
     try:
         users = _load_users()
 
         # Check if phone number already exists
         existing_phone = next((u for u in users if u["phone"] == user_register.phone), None)
         if existing_phone:
+            # Audit failed registration attempt
+            audit_service.log_authentication(
+                user_id="unknown",
+                success=False,
+                ip_address=client_ip,
+                endpoint="/auth/register",
+                details={"reason": "phone_exists", "phone": user_register.phone}
+            )
             raise HTTPException(status_code=400, detail="Phone number already registered")
 
         # Check if email already exists
         existing_email = next((u for u in users if u.get("email") == user_register.email), None)
         if existing_email:
+            # Audit failed registration attempt
+            audit_service.log_authentication(
+                user_id="unknown",
+                success=False,
+                ip_address=client_ip,
+                endpoint="/auth/register",
+                details={"reason": "email_exists", "email": user_register.email}
+            )
             raise HTTPException(status_code=400, detail="Email already registered")
 
         # Create new user with hashed password
@@ -63,6 +89,15 @@ async def register(user_register: UserRegister):
         # Create access token
         access_token = create_access_token(subject=new_user["id"])
 
+        # Audit successful registration
+        audit_service.log_authentication(
+            user_id=new_user["id"],
+            success=True,
+            ip_address=client_ip,
+            endpoint="/auth/register",
+            details={"phone": user_register.phone, "email": user_register.email}
+        )
+
         return {
             "msg": "User registered successfully",
             "user": {
@@ -78,28 +113,71 @@ async def register(user_register: UserRegister):
     except HTTPException:
         raise
     except Exception as e:
+        # Audit unexpected registration error
+        audit_service.log_security_event(
+            "Registration error",
+            AuditSeverity.HIGH,
+            client_ip,
+            {"error": str(e), "phone": getattr(user_register, 'phone', 'unknown')}
+        )
         raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
 
 @router.post("/login")
-async def login(user_login: UserLogin):
+@limiter.limit("5/minute")
+async def login(request: Request, user_login: UserLogin):
+    client_ip = request.client.host if request.client else "unknown"
+
     try:
         users = _load_users()
 
         # Find user by phone number
         user = next((u for u in users if u["phone"] == user_login.phone), None)
         if not user:
+            # Audit failed login attempt
+            audit_service.log_authentication(
+                user_id="unknown",
+                success=False,
+                ip_address=client_ip,
+                endpoint="/auth/login",
+                details={"reason": "user_not_found", "phone": user_login.phone}
+            )
             raise HTTPException(status_code=401, detail="User not found. Please register first.")
 
         # Check if user has a password (registered users should have one)
         if not user.get("password"):
+            # Audit failed login attempt
+            audit_service.log_authentication(
+                user_id=user["id"],
+                success=False,
+                ip_address=client_ip,
+                endpoint="/auth/login",
+                details={"reason": "no_password", "phone": user_login.phone}
+            )
             raise HTTPException(status_code=401, detail="User not found. Please register first.")
 
         # Verify password
         if not verify_password(user_login.password, user["password"]):
+            # Audit failed login attempt
+            audit_service.log_authentication(
+                user_id=user["id"],
+                success=False,
+                ip_address=client_ip,
+                endpoint="/auth/login",
+                details={"reason": "invalid_password", "phone": user_login.phone}
+            )
             raise HTTPException(status_code=401, detail="Invalid password")
 
         # Create access token
         access_token = create_access_token(subject=user["id"])
+
+        # Audit successful login
+        audit_service.log_authentication(
+            user_id=user["id"],
+            success=True,
+            ip_address=client_ip,
+            endpoint="/auth/login",
+            details={"phone": user_login.phone}
+        )
 
         return {
             "msg": "login_successful",
@@ -120,6 +198,13 @@ async def login(user_login: UserLogin):
     except HTTPException:
         raise
     except Exception as e:
+        # Audit unexpected login error
+        audit_service.log_security_event(
+            "Login error",
+            AuditSeverity.HIGH,
+            client_ip,
+            {"error": str(e), "phone": getattr(user_login, 'phone', 'unknown')}
+        )
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 @router.get("/users")
