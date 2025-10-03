@@ -86,31 +86,41 @@ def _build_profile_response(user: dict, viewer_id: str = None, connections: list
         c['following_id'] == user['id'] or c['follower_id'] == user['id']
     )])
 
-    # Base response
-    response = UserProfileResponse(
-        id=user['id'],
-        name=user['name'],
-        picture=user.get('picture'),
-        bio=user.get('bio'),
-        is_private=user.get('is_private', False),
-        connections_count=connections_count,
-        created_at=user['createdAt']
-    )
+    # Check if viewer can see full profile
+    can_view_full_profile = viewer_id and _can_view_profile(viewer_id, user, connections)
+    
+    # Base response - always show public info
+    response_data = {
+        'id': user['id'],
+        'name': user['name'],
+        'is_private': user.get('is_private', False),
+        'connections_count': connections_count,
+        'created_at': user['createdAt'],
+        'picture': None,
+        'bio': None,
+        'strava_link': None,
+        'instagram_id': None,
+        'subscribed_events': None
+    }
+
+    # Add private info based on privacy settings
+    if not user.get('is_private', False) or can_view_full_profile:
+        # Public profile OR viewer has accepted connection
+        response_data.update({
+            'picture': user.get('picture'),
+            'bio': user.get('bio'),
+            'strava_link': user.get('strava_link'),
+            'instagram_id': user.get('instagram_id'),
+            'subscribed_events': user.get('subscribedEvents', [])
+        })
+
+    response = UserProfileResponse(**response_data)
 
     # Add relationship status if viewer is specified
     if viewer_id:
         relationship = _get_relationship_status(viewer_id, user['id'], connections)
         response.is_connected = relationship['is_connected']
         response.connection_status = relationship['connection_status']
-
-        # Add private info only if viewer can see it
-        if _can_view_profile(viewer_id, user, connections):
-            # Phone and email are hidden for privacy - remove these lines:
-            # response.phone = user.get('phone')
-            # response.email = user.get('email')
-            response.strava_link = user.get('strava_link')
-            response.instagram_id = user.get('instagram_id')
-            response.subscribed_events = user.get('subscribedEvents', [])
 
     return response
 
