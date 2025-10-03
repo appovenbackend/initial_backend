@@ -153,8 +153,36 @@ async def list_events():
     _cache_set_events_list([event.dict() for event in results])
     return results
 
+@router.get("/all", response_model=List[Event])
+
+async def get_all_events(request: Request):
+    """
+    Get ALL events including deactivated and expired events.
+    This endpoint returns every event in the database regardless of active status or end date.
+    Useful for admin purposes, analytics, or when you need to see historical/deactivated events.
+    """
+    try:
+        events = _load_events()
+
+        # Convert all events to Event models without any filtering
+        result = []
+        for e in events:
+            try:
+                result.append(Event(**e))
+            except Exception as exc:
+                print(f"Warning: Skipping malformed event {e.get('id', 'unknown')}: {exc}")
+                continue
+
+        print(f"DEBUG: Returning {len(result)} total events (including deactivated/expired)")
+        return result
+
+    except Exception as e:
+        print(f"Error in get_all_events: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve all events: {str(e)}")
+
 @router.get("/recent", response_model=List[Event])
-async def list_recent_events(limit: int = 10):
+
+async def list_recent_events(request: Request, limit: int = 10):
     """
     Get the most recent events by creation date.
     Returns up to the specified limit (default 10) of the most recently added events.
@@ -201,7 +229,8 @@ async def get_event(event_id: str):
     return Event(**e)
 
 @router.get("/{event_id}/registered_users")
-async def get_registered_users_for_event(event_id: str):
+@limiter.limit("20/minute")
+async def get_registered_users_for_event(request: Request, event_id: str):
     # Check if event exists
     events = _load_events()
     e = next((x for x in events if x["id"] == event_id), None)
@@ -423,7 +452,8 @@ async def update_event_partial(event_id: str, event_updates: dict):
     }
 
 @router.put("/{event_id}/deactivate")
-async def deactivate_event(event_id: str):
+@limiter.limit("15/minute")
+async def deactivate_event(request: Request, event_id: str):
     events = _load_events()
     e = next((x for x in events if x["id"] == event_id), None)
     if not e:
@@ -434,6 +464,48 @@ async def deactivate_event(event_id: str):
     _save_events(events)  # Pass all events for update
     _cache_invalidate_events_list()
     return {"message": "Event deactivated successfully"}
+
+@router.put("/{event_id}/toggle-activation")
+@limiter.limit("15/minute")
+async def toggle_event_activation(request: Request, event_id: str):
+    """
+    Toggle the activation status of an event.
+    If event is active, it will be deactivated.
+    If event is inactive, it will be activated.
+    """
+    try:
+        events = _load_events()
+        event = next((e for e in events if e["id"] == event_id), None)
+
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+
+        # Toggle the activation status
+        current_status = event.get("isActive", True)
+        new_status = not current_status
+        event["isActive"] = new_status
+
+        # Save the updated events list
+        _save_events(events)
+        _cache_invalidate_events_list()
+
+        # Determine action for response message
+        action = "activated" if new_status else "deactivated"
+        status_text = "active" if new_status else "inactive"
+
+        return {
+            "message": f"Event {action} successfully",
+            "event_id": event_id,
+            "event_title": event.get("title"),
+            "new_status": status_text,
+            "is_active": new_status
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error toggling event activation: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to toggle event activation: {str(e)}")
 
 # New Featured Slot Management Endpoints
 @router.get("/featured/slots")
