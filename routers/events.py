@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from uuid import uuid4
 from datetime import datetime, timedelta
 from dateutil import parser
@@ -452,7 +452,7 @@ async def update_event_partial(event_id: str, event_updates: dict):
     }
 
 @router.put("/{event_id}/deactivate")
-@limiter.limit("15/minute")
+
 async def deactivate_event(request: Request, event_id: str):
     events = _load_events()
     e = next((x for x in events if x["id"] == event_id), None)
@@ -466,7 +466,7 @@ async def deactivate_event(request: Request, event_id: str):
     return {"message": "Event deactivated successfully"}
 
 @router.put("/{event_id}/toggle-activation")
-@limiter.limit("15/minute")
+
 async def toggle_event_activation(request: Request, event_id: str):
     """
     Toggle the activation status of an event.
