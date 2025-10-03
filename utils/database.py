@@ -449,9 +449,7 @@ def write_user_follows(data):
     try:
         # Use transaction for atomicity
         with db.begin():
-            # Clear existing follows
-            db.query(UserFollowDB).delete()
-            # Add new follows
+            # Instead of clearing all, upsert each follow to prevent data loss
             for follow_data in data:
                 # Filter only the fields that exist in UserFollowDB model
                 filtered_data = {
@@ -464,8 +462,20 @@ def write_user_follows(data):
                 }
                 # Remove None values for required fields
                 filtered_data = {k: v for k, v in filtered_data.items() if k in ['id', 'follower_id', 'following_id', 'status', 'created_at', 'updated_at'] or v is not None}
-                follow = UserFollowDB(**filtered_data)
-                db.add(follow)
+
+                follow_id = filtered_data.get('id')
+
+                # Check if follow exists by ID first
+                existing_follow = db.query(UserFollowDB).filter(UserFollowDB.id == follow_id).first()
+
+                if existing_follow:
+                    # Update existing follow
+                    for key, value in filtered_data.items():
+                        setattr(existing_follow, key, value)
+                else:
+                    # Add new follow
+                    follow = UserFollowDB(**filtered_data)
+                    db.add(follow)
     finally:
         SessionLocal.remove()
 
