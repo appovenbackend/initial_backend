@@ -30,7 +30,7 @@ from services.featured_events_service import (
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-# Rate limiting
+# Rate limiting - must be defined before any function that uses @limiter.limit
 limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/events", tags=["Events"])
