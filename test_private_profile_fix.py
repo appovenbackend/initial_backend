@@ -6,7 +6,7 @@ Test script to verify private profile privacy controls are working correctly.
 import requests
 import json
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "https://initialbackend-production.up.railway.app/"
 
 def test_private_profile_functionality():
     """Test private profile privacy controls"""
