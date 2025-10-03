@@ -43,13 +43,7 @@ def get_current_user(request: Request) -> str:
 
 def _get_relationship_status(current_user_id: str, target_user_id: str, connections: list) -> dict:
     """Return connection status between two users in the new connection model."""
-    # Pending request from current to target
-    outgoing = next(
-        (c for c in connections
-         if c['follower_id'] == current_user_id and c['following_id'] == target_user_id),
-        None
-    )
-    # Accepted connection (either direction)
+    # Check for accepted connection (either direction) - always visible
     accepted = next(
         (c for c in connections if c['status'] == 'accepted' and (
             (c['follower_id'] == current_user_id and c['following_id'] == target_user_id) or
@@ -58,9 +52,23 @@ def _get_relationship_status(current_user_id: str, target_user_id: str, connecti
         None
     )
 
+    if accepted:
+        return {
+            'is_connected': True,
+            'connection_status': 'accepted'
+        }
+
+    # For pending requests, only show to the receiver (target), not the sender
+    # This ensures privacy - senders cannot see their own pending requests
+    incoming_pending = next(
+        (c for c in connections
+         if c['follower_id'] == current_user_id and c['following_id'] == target_user_id and c['status'] == 'pending'),
+        None
+    )
+
     return {
-        'is_connected': accepted is not None,
-        'connection_status': outgoing['status'] if outgoing else ('accepted' if accepted else None)
+        'is_connected': False,
+        'connection_status': None  # Hide pending status from sender
     }
 
 def _can_view_profile(viewer_id: str, target_user: dict, connections: list) -> bool:
@@ -86,6 +94,7 @@ def _build_profile_response(user: dict, viewer_id: str = None, connections: list
     connections_count = len([c for c in connections if c['status'] == 'accepted' and (
         c['following_id'] == user['id'] or c['follower_id'] == user['id']
     )])
+
 
     # Check if viewer can see full profile
     can_view_full_profile = viewer_id and _can_view_profile(viewer_id, user, connections)
@@ -201,10 +210,9 @@ async def request_connection(
 
     follows = _load_user_follows()
 
-    # Check if existing connection or request
+    # Check if existing connection or request FROM current user TO target user only
     existing = next((c for c in follows if (
-        (c['follower_id'] == current_user_id and c['following_id'] == user_id) or
-        (c['follower_id'] == user_id and c['following_id'] == current_user_id)
+        c['follower_id'] == current_user_id and c['following_id'] == user_id
     )), None)
 
     if existing:
