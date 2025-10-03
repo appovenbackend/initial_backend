@@ -242,6 +242,16 @@ async def payments_verify(payload: dict):
     tickets = _load_tickets()
     tickets.append(new_ticket)
     _save_tickets(tickets)
+
+    # Award legacy points for paid event registration
+    from models.user import UserPoints
+    points_to_award = UserPoints.calculate_points(ev["priceINR"])
+    from utils.database import award_points_to_user
+    if award_points_to_user(userId, points_to_award, f"Payment verification for event: {ev['title']}"):
+        print(f"✅ Awarded {points_to_award} points to user {userId}")
+    else:
+        print(f"❌ Failed to award points to user {userId}")
+
     return new_ticket
 
 @router.get("/tickets/{user_id}")
