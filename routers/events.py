@@ -27,6 +27,11 @@ from services.featured_events_service import (
     clear_featured_slot,
     get_featured_slots,
 )
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+# Rate limiting
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
