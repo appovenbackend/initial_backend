@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, Header
 from uuid import uuid4
 from datetime import datetime, timedelta
 from utils.database import read_users, write_users
 from core.config import IST, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SECRET_KEY, ALGORITHM
-from models.user import UserIn, User, UserUpdate
+from core.security import hash_password, verify_password, create_access_token
+from models.user import UserIn, User, UserUpdate, UserRegister, UserLogin
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 import os
@@ -30,62 +31,94 @@ def _load_users():
 def _save_users(data):
     write_users(data)
 
-def create_access_token(data: dict, expires_delta: timedelta = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-@router.post("/login")
-async def login(user_in: UserIn):
+@router.post("/register")
+async def register(user_register: UserRegister):
     try:
         users = _load_users()
 
-        # Check if user already exists with this phone number
-        existing_user = next((u for u in users if u["phone"] == user_in.phone), None)
+        # Check if phone number already exists
+        existing_phone = next((u for u in users if u["phone"] == user_register.phone), None)
+        if existing_phone:
+            raise HTTPException(status_code=400, detail="Phone number already registered")
 
-        if existing_user:
-            # User exists, return existing user info
-            access_token = create_access_token(data={"sub": existing_user["id"]})
-            return {
-                "msg": "login_successful",
-                "userId": existing_user["id"],
-                "name": existing_user["name"],
-                "phone": existing_user["phone"],
-                "email": existing_user.get("email"),
-                "bio": existing_user.get("bio"),
-                "strava_link": existing_user.get("strava_link"),
-                "instagram_id": existing_user.get("instagram_id"),
-                "picture": existing_user.get("picture"),
-                "createdAt": existing_user["createdAt"],
-                "access_token": access_token,
-                "token_type": "bearer"
-            }
+        # Check if email already exists
+        existing_email = next((u for u in users if u.get("email") == user_register.email), None)
+        if existing_email:
+            raise HTTPException(status_code=400, detail="Email already registered")
 
-        # User doesn't exist, create new user
+        # Create new user with hashed password
+        hashed_password = hash_password(user_register.password)
         new_user = User(
             id="u_" + uuid4().hex[:10],
-            name=user_in.name,
-            phone=user_in.phone,
+            name=user_register.name,
+            phone=user_register.phone,
+            email=user_register.email,
+            password=hashed_password,
             role="user",
             createdAt=datetime.now(IST).isoformat()
         ).dict()
         users.append(new_user)
         _save_users(users)
-        access_token = create_access_token(data={"sub": new_user["id"]})
+
+        # Create access token
+        access_token = create_access_token(subject=new_user["id"])
+
         return {
-            "msg": "registered",
-            "userId": new_user["id"],
-            "name": new_user["name"],
-            "phone": new_user["phone"],
-            "createdAt": new_user["createdAt"],
+            "msg": "User registered successfully",
+            "user": {
+                "id": new_user["id"],
+                "name": new_user["name"],
+                "email": new_user["email"],
+                "phone": new_user["phone"],
+                "createdAt": new_user["createdAt"]
+            },
             "access_token": access_token,
             "token_type": "bearer"
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+
+@router.post("/login")
+async def login(user_login: UserLogin):
+    try:
+        users = _load_users()
+
+        # Find user by phone number
+        user = next((u for u in users if u["phone"] == user_login.phone), None)
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found. Please register first.")
+
+        # Check if user has a password (registered users should have one)
+        if not user.get("password"):
+            raise HTTPException(status_code=401, detail="User not found. Please register first.")
+
+        # Verify password
+        if not verify_password(user_login.password, user["password"]):
+            raise HTTPException(status_code=401, detail="Invalid password")
+
+        # Create access token
+        access_token = create_access_token(subject=user["id"])
+
+        return {
+            "msg": "login_successful",
+            "user": {
+                "id": user["id"],
+                "name": user["name"],
+                "email": user.get("email"),
+                "phone": user["phone"],
+                "bio": user.get("bio"),
+                "strava_link": user.get("strava_link"),
+                "instagram_id": user.get("instagram_id"),
+                "picture": user.get("picture"),
+                "createdAt": user["createdAt"]
+            },
+            "access_token": access_token,
+            "token_type": "bearer"
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
@@ -196,7 +229,7 @@ async def google_callback(request: Request):
 
         if existing_user:
             # User exists, return existing user info
-            access_token = create_access_token(data={"sub": existing_user["id"]})
+            access_token = create_access_token(subject=existing_user["id"])
             return {
                 "msg": "login_successful",
                 "user": {
@@ -226,7 +259,7 @@ async def google_callback(request: Request):
         ).dict()
         users.append(new_user)
         _save_users(users)
-        access_token = create_access_token(data={"sub": new_user["id"]})
+        access_token = create_access_token(subject=new_user["id"])
         return {
             "msg": "registered",
             "user": {
@@ -244,3 +277,17 @@ async def google_callback(request: Request):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Google login failed: {str(e)}")
+
+@router.get("/points")
+async def get_user_points(request: Request, x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")):
+    """Get user points for display"""
+    from utils.database import get_user_points
+
+    points_data = get_user_points(x_user_id)
+
+    # Return user-friendly format
+    return {
+        "user_id": points_data["id"],
+        "total_points": points_data["total_points"],
+        "point_history": points_data["transaction_history"]
+    }

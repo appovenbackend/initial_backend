@@ -4,8 +4,9 @@ from datetime import datetime
 from dateutil import parser
 from utils.database import read_users, write_users, read_events, write_events, read_tickets, write_tickets, read_received_qr_tokens, write_received_qr_tokens
 from core.config import IST
-from services.payment_service import razorpay_create_order, razorpay_verify_signature
+
 from services.qr_service import create_qr_token
+from services.payment_service import razorpay_verify_signature
 from models.ticket import Ticket
 import json
 import logging
@@ -101,22 +102,7 @@ def _to_ist(dt_iso: str):
         dt = dt.replace(tzinfo=IST)
     return dt.astimezone(IST)
 
-@router.post("/payments/order")
-async def payments_create_order(phone: str, eventId: str):
-    """Create Razorpay order in paise; returns order data and key_id for client checkout."""
-    users = _load_users()
-    user = next((u for u in users if u["phone"] == phone), None)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    events = _load_events()
-    ev = next((e for e in events if e["id"] == eventId), None)
-    if not ev:
-        raise HTTPException(status_code=404, detail="Event not found")
-    if ev.get("priceINR", 0) <= 0:
-        raise HTTPException(status_code=400, detail="Event is free")
 
-    order = await razorpay_create_order(eventId, int(ev["priceINR"]))
-    return {"order": order}
 
 @router.post("/register/free", response_model=Ticket)
 async def register_free(payload: dict):
@@ -196,6 +182,16 @@ async def register_free(payload: dict):
     tickets = existing_tickets
     tickets.append(new_ticket)
     _save_tickets(tickets)
+
+    # Award legacy points for free event registration
+    from models.user import UserPoints
+    points_to_award = UserPoints.calculate_points(ev["priceINR"])
+    from utils.database import award_points_to_user
+    if award_points_to_user(userId, points_to_award, f"Free registration for event: {ev['title']}"):
+        print(f"✅ Awarded {points_to_award} points to user {userId}")
+    else:
+        print(f"❌ Failed to award points to user {userId}")
+
     return new_ticket
 
 @router.post("/payments/verify", response_model=Ticket)

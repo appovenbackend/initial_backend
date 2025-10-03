@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request, Depends, Query
 from uuid import uuid4
 from datetime import datetime, timedelta
 import hmac
@@ -46,15 +46,18 @@ def _to_ist(dt_iso: str):
 
 @router.post("/order")
 @limiter.limit("10/minute")
-async def create_payment_order(request: Request, payload: dict):
+async def create_payment_order(
+    request: Request,
+    phone: str = Query(..., description="User phone number"),
+    eventId: str = Query(..., alias="eventId", description="Event ID")
+):
     """
     Create a Razorpay order for event payment.
 
-    payload: { "phone": "...", "eventId": "..." }
+    Query params: phone, eventId
     Returns: { "order_id": "...", "key_id": "...", "amount": 50000, "currency": "INR" }
     """
-    phone = payload.get("phone")
-    event_id = payload.get("eventId")
+    event_id = eventId  # normalize variable name
 
     if not phone or not event_id:
         raise HTTPException(status_code=400, detail="phone and eventId required")
@@ -203,6 +206,15 @@ async def verify_payment(request: Request, payload: dict):
     # Store ticket for webhook verification
     payment_tickets[payment_id] = new_ticket
 
+    # Award legacy points for paid event registration
+    from models.user import UserPoints
+    points_to_award = UserPoints.calculate_points(event.get("priceINR", 0))
+    from utils.database import award_points_to_user
+    if award_points_to_user(user["id"], points_to_award, f"Payment verification for event: {event['title']}"):
+        logger.info(f"✅ Awarded {points_to_award} points to user {user['id']}")
+    else:
+        logger.error(f"❌ Failed to award points to user {user['id']}")
+
     logger.info(f"Payment verified and ticket issued: {ticket_id} for payment {payment_id}")
 
     return {
@@ -292,6 +304,15 @@ async def razorpay_webhook(request: Request):
                     tickets = read_tickets()
                     tickets.append(new_ticket)
                     write_tickets(tickets)
+
+                    # Award legacy points for paid event registration via webhook
+                    from models.user import UserPoints
+                    points_to_award = UserPoints.calculate_points(order_info["amount"])
+                    from utils.database import award_points_to_user
+                    if award_points_to_user(user_id, points_to_award, f"Webhook payment for event (auto-created ticket)"):
+                        logger.info(f"✅ Awarded {points_to_award} points to user {user_id}")
+                    else:
+                        logger.error(f"❌ Failed to award points to user {user_id}")
 
                     # Update tracking
                     payment_tickets[payment_id] = new_ticket

@@ -82,6 +82,7 @@ class UserDB(Base):
     strava_link = Column(String, nullable=True)
     instagram_id = Column(String, nullable=True)
     is_private = Column(Boolean, default=False)
+    password = Column(String, nullable=True)
     createdAt = Column(String, nullable=False)
 
 class EventDB(Base):
@@ -136,6 +137,13 @@ class UserFollowDB(Base):
     status = Column(String, nullable=False, default="pending")  # 'pending', 'accepted', 'blocked'
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
+
+class UserPointsDB(Base):
+    __tablename__ = "user_points"
+
+    id = Column(String, primary_key=True, index=True)  # user_id
+    total_points = Column(Integer, nullable=False, default=0)
+    transaction_history = Column(Text, nullable=True)  # JSON string of transactions
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -458,6 +466,143 @@ def write_user_follows(data):
                 filtered_data = {k: v for k, v in filtered_data.items() if k in ['id', 'follower_id', 'following_id', 'status', 'created_at', 'updated_at'] or v is not None}
                 follow = UserFollowDB(**filtered_data)
                 db.add(follow)
+    finally:
+        SessionLocal.remove()
+
+def read_user_points():
+    """Read user points for all users"""
+    db = SessionLocal()
+    try:
+        points = db.query(UserPointsDB).all()
+        result = []
+        for point in points:
+            point_dict = point.__dict__.copy()
+            point_dict.pop('_sa_instance_state', None)
+
+            # Deserialize JSON transaction_history
+            if USE_POSTGRESQL:
+                if point_dict.get('transaction_history') is not None:
+                    try:
+                        point_dict['transaction_history'] = json.loads(point_dict['transaction_history'])
+                    except (json.JSONDecodeError, TypeError):
+                        point_dict['transaction_history'] = []
+                else:
+                    point_dict['transaction_history'] = []
+
+            result.append(point_dict)
+        return result
+    finally:
+        SessionLocal.remove()
+
+def write_user_points(data):
+    """Write user points (upsert)"""
+    db = SessionLocal()
+    try:
+        with db.begin():
+            for points_data in data:
+                # Filter only the fields that exist in UserPointsDB model
+                filtered_data = {
+                    'id': points_data.get('id'),
+                    'total_points': points_data.get('total_points', 0),
+                    'transaction_history': points_data.get('transaction_history')
+                }
+
+                # Serialize dict/list fields to JSON strings for PostgreSQL compatibility
+                if USE_POSTGRESQL and filtered_data.get('transaction_history') is not None:
+                    filtered_data['transaction_history'] = json.dumps(filtered_data['transaction_history'])
+
+                user_id = filtered_data.get('id')
+
+                # Check if user points exist
+                existing_points = db.query(UserPointsDB).filter(UserPointsDB.id == user_id).first()
+
+                if existing_points:
+                    # Update existing
+                    for key, value in filtered_data.items():
+                        setattr(existing_points, key, value)
+                else:
+                    # Add new
+                    points = UserPointsDB(**filtered_data)
+                    db.add(points)
+    finally:
+        SessionLocal.remove()
+
+def get_user_points(user_id: str):
+    """Get points for a specific user"""
+    db = SessionLocal()
+    try:
+        points = db.query(UserPointsDB).filter(UserPointsDB.id == user_id).first()
+        if points:
+            point_dict = points.__dict__.copy()
+            point_dict.pop('_sa_instance_state', None)
+
+            # Deserialize JSON transaction_history
+            if USE_POSTGRESQL:
+                if point_dict.get('transaction_history') is not None:
+                    try:
+                        point_dict['transaction_history'] = json.loads(point_dict['transaction_history'])
+                    except (json.JSONDecodeError, TypeError):
+                        point_dict['transaction_history'] = []
+                else:
+                    point_dict['transaction_history'] = []
+
+            return point_dict
+        else:
+            # Return default points object for new users
+            return {
+                'id': user_id,
+                'total_points': 0,
+                'transaction_history': []
+            }
+    finally:
+        SessionLocal.remove()
+
+def award_points_to_user(user_id: str, points: int, reason: str):
+    """Award points to a user and record the transaction"""
+    db = SessionLocal()
+    try:
+        with db.begin():
+            # Get or create user points
+            user_points = db.query(UserPointsDB).filter(UserPointsDB.id == user_id).first()
+
+            from datetime import datetime
+            from core.config import IST
+            timestamp = datetime.now(IST).isoformat()
+
+            transaction = {
+                "type": "earned",
+                "points": points,
+                "reason": reason,
+                "timestamp": timestamp
+            }
+
+            if user_points:
+                # Update existing
+                user_points.total_points += points
+                current_history = []
+                if USE_POSTGRESQL and user_points.transaction_history:
+                    try:
+                        current_history = json.loads(user_points.transaction_history)
+                    except:
+                        current_history = []
+                elif user_points.transaction_history:
+                    current_history = user_points.transaction_history
+
+                current_history.append(transaction)
+                user_points.transaction_history = json.dumps(current_history) if USE_POSTGRESQL else current_history
+            else:
+                # Create new
+                user_points = UserPointsDB(
+                    id=user_id,
+                    total_points=points,
+                    transaction_history=json.dumps([transaction]) if USE_POSTGRESQL else [transaction]
+                )
+                db.add(user_points)
+
+        return True
+    except Exception as e:
+        print(f"Error awarding points: {e}")
+        return False
     finally:
         SessionLocal.remove()
 

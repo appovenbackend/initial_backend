@@ -13,7 +13,7 @@ from sqlalchemy import create_engine, text, MetaData, Table, Column, String, Boo
 from core.config import DATABASE_URL, USE_POSTGRESQL
 
 def migrate_events_table():
-    """Add organizerName, organizerLogo, coordinate_lat, coordinate_long, and address_url columns to events table"""
+    """Add organizerName, organizerLogo, coordinate_lat, coordinate_long, address_url, and registration_link columns to events table"""
 
     if not USE_POSTGRESQL:
         print("⚠️  Migration only needed for PostgreSQL. Skipping for SQLite.")
@@ -36,7 +36,7 @@ def migrate_events_table():
                 SELECT column_name
                 FROM information_schema.columns
                 WHERE table_name = 'events'
-                AND column_name IN ('organizerName', 'organizerLogo', 'coordinate_lat', 'coordinate_long', 'address_url')
+                AND column_name IN ('organizerName', 'organizerLogo', 'coordinate_lat', 'coordinate_long', 'address_url', 'registration_link')
             """))
 
             existing_columns = [row[0] for row in result.fetchall()]
@@ -91,6 +91,15 @@ def migrate_events_table():
                 print("✅ Added address_url column")
             else:
                 print("ℹ️  address_url column already exists")
+
+            # Add registration_link column if it doesn't exist
+            if 'registration_link' not in existing_columns:
+                print("📝 Adding registration_link column...")
+                conn.execute(text('ALTER TABLE events ADD COLUMN "registration_link" VARCHAR'))
+                conn.commit()
+                print("✅ Added registration_link column")
+            else:
+                print("ℹ️  registration_link column already exists")
 
         print("🎉 Migration completed successfully!")
 
@@ -213,6 +222,15 @@ def migrate_users_table():
                 print("✅ Added is_private column")
             else:
                 print("ℹ️  is_private column already exists")
+
+            # Add password column for authentication
+            if 'password' not in existing_columns:
+                print("📝 Adding password column to users...")
+                conn.execute(text('ALTER TABLE users ADD COLUMN password VARCHAR'))
+                conn.commit()
+                print("✅ Added password column")
+            else:
+                print("ℹ️  password column already exists")
 
         print("🎉 Users table migration completed!")
     except Exception as e:

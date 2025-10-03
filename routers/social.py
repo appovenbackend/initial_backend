@@ -65,7 +65,8 @@ def _get_relationship_status(current_user_id: str, target_user_id: str, connecti
 
 def _can_view_profile(viewer_id: str, target_user: dict, connections: list) -> bool:
     """Check if viewer can see target's full profile"""
-    if not target_user.get('is_private', False):
+    is_private = bool(target_user.get('is_private', False))
+    if not is_private:
         return True  # Public profile
 
     # Check if there is an accepted connection (either direction)
@@ -141,28 +142,45 @@ async def get_user_profile(
     follows = _load_user_follows()
     return _build_profile_response(user, current_user_id, follows)
 
-@router.put("/users/{user_id}/privacy")
-async def update_privacy_setting(
+@router.get("/users/{user_id}/privacy")
+async def get_privacy_setting(
     user_id: str,
-    is_private: bool,
     request: Request,
     x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
 ):
-    """Toggle account privacy setting"""
-    current_user_id = get_current_user(request)
-
-    if current_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Can only update your own privacy settings")
+    """Get the current privacy setting for a user"""
+    current_user_id = x_user_id  # Use the header parameter directly
 
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user['is_private'] = is_private
+    is_private = bool(user.get('is_private', False))
+    return {"user_id": user_id, "is_private": is_private}
+
+@router.put("/users/{user_id}/privacy")
+async def update_privacy_setting(
+    user_id: str,
+    request: Request,
+):
+    """Toggle the user's account privacy setting"""
+    current_user_id = get_current_user(request)
+
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Can only toggle your own privacy settings")
+
+    users = _load_users()
+    user = next((u for u in users if u['id'] == user_id), None)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Toggle the privacy setting
+    user['is_private'] = not user.get('is_private', False)
     _save_users(users)
 
-    return {"message": f"Account set to {'private' if is_private else 'public'}", "is_private": is_private}
+    new_state = user['is_private']
+    return {"message": f"Account toggled to {'private' if new_state else 'public'}", "is_private": new_state}
 
 @router.post("/users/{user_id}/connect", response_model=ConnectionResponse)
 async def request_connection(
@@ -195,13 +213,18 @@ async def request_connection(
         elif existing['status'] == 'pending':
             raise HTTPException(status_code=400, detail="Connection request already pending")
 
+    # Check privacy status more carefully with explicit boolean conversion
+    is_private = bool(target_user.get('is_private', False))
+
     # Create follow relationship
     now = _now_ist()
+    connection_status = 'accepted' if not is_private else 'pending'
+
     new_follow = {
         'id': f"conn_{uuid4().hex[:10]}",
         'follower_id': current_user_id,
         'following_id': user_id,
-        'status': 'accepted' if not target_user.get('is_private', False) else 'pending',
+        'status': connection_status,
         'created_at': now,
         'updated_at': now
     }
@@ -351,22 +374,42 @@ async def get_user_connections(
         if f['follower_id'] == user_id:
             connection_user_ids.add(f['following_id'])
 
-    followers = []
+    connections = []
     for cid in connection_user_ids:
         cu = next((u for u in users if u['id'] == cid), None)
         if cu:
-            followers.append(_build_profile_response(cu, current_user_id, follows))
+            connections.append(_build_profile_response(cu, current_user_id, follows))
 
-    return {"connections": followers, "count": len(followers)}
+    return {"connections": connections, "count": len(connections)}
 
-@router.get("/users/{user_id}/connections/mine")
+@router.get("/connections")
 async def get_my_connections(
-    user_id: str,
     request: Request,
     x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
 ):
-    """Alias endpoint to return the same connections list for compatibility."""
-    return await get_user_connections(user_id, request)
+    """Get current user's connections (accepted, either direction)."""
+    current_user_id = get_current_user(request)
+
+    users = _load_users()
+    follows = _load_user_follows()
+
+    # Collect accepted connections (both directions) for current user
+    connection_user_ids = set()
+    for f in follows:
+        if f['status'] != 'accepted':
+            continue
+        if f['following_id'] == current_user_id:
+            connection_user_ids.add(f['follower_id'])
+        if f['follower_id'] == current_user_id:
+            connection_user_ids.add(f['following_id'])
+
+    connections = []
+    for cid in connection_user_ids:
+        cu = next((u for u in users if u['id'] == cid), None)
+        if cu:
+            connections.append(_build_profile_response(cu, current_user_id, follows))
+
+    return {"connections": connections, "count": len(connections)}
 
 @router.get("/feed")
 async def get_activity_feed(
