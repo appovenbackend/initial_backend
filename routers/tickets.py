@@ -183,14 +183,7 @@ async def register_free(payload: dict):
     tickets.append(new_ticket)
     _save_tickets(tickets)
 
-    # Award legacy points for free event registration
-    from models.user import UserPoints
-    points_to_award = UserPoints.calculate_points(ev["priceINR"])
-    from utils.database import award_points_to_user
-    if award_points_to_user(userId, points_to_award, f"Free registration for event: {ev['title']}"):
-        print(f"✅ Awarded {points_to_award} points to user {userId}")
-    else:
-        print(f"❌ Failed to award points to user {userId}")
+
 
     return new_ticket
 
@@ -415,6 +408,23 @@ async def validate_token(body: dict, request: Request):
     hist.append({"ts": validated_at})
     ticket["validationHistory"] = hist
 
+    # Award points for free events on validation (not on registration)
+    points_awarded = False
+    if ev and ev.get("priceINR", 0) <= 0:  # Free event
+        # Check if points already awarded for this validation
+        if not any(entry.get("pointsAwarded") for entry in hist[:-1]):  # Check all history except current entry
+            from models.user import UserPoints
+            points_to_award = UserPoints.calculate_points(ev["priceINR"])
+            from utils.database import award_points_to_user
+            if award_points_to_user(user_id, points_to_award, f"Free event validation for: {ev['title']}"):
+                print(f"✅ Awarded {points_to_award} points to user {user_id} for free event validation")
+                # Mark this validation as having awarded points
+                hist[-1]["pointsAwarded"] = True
+                ticket["validationHistory"] = hist
+                points_awarded = True
+            else:
+                print(f"❌ Failed to award points to user {user_id} for free event validation")
+
     # persist tickets
     all_tickets = _load_tickets()
     for i, t in enumerate(all_tickets):
@@ -423,7 +433,7 @@ async def validate_token(body: dict, request: Request):
             break
     _save_tickets(all_tickets)
 
-    return {
+    response_data = {
         "status": "valid",
         "ticket_id": ticket_id,
         "user": {"id": user.get("id"), "name": user.get("name"), "phone": user.get("phone")},
@@ -432,3 +442,8 @@ async def validate_token(body: dict, request: Request):
         "validatedAt": validated_at,
         "validationHistory": ticket.get("validationHistory", [])
     }
+
+    if points_awarded:
+        response_data["pointsAwarded"] = True
+
+    return response_data
