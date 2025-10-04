@@ -12,7 +12,10 @@ logger = logging.getLogger(__name__)
 
 class JWTSecurityManager:
     def __init__(self):
-        self.redis_client = redis.from_url(REDIS_URL) if REDIS_URL else None
+        if REDIS_URL and REDIS_URL.startswith(('redis://', 'rediss://', 'unix://')):
+            self.redis_client = redis.from_url(REDIS_URL)
+        else:
+            self.redis_client = None
         self.blacklisted_tokens = set()
     
     def create_token(self, user_id: str, additional_claims: dict = None) -> str:
