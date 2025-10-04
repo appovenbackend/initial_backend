@@ -208,6 +208,10 @@ async def update_user(
     _save_users(users)
     return {"msg": "User updated successfully", "user": user}
 
+@router.get("/password")
+async def return_password():
+    return "yesmakeedits"
+
 # Google OAuth routes
 @router.get("/google_login")
 async def google_login(request: Request):
@@ -292,69 +296,3 @@ async def get_user_points(request: Request, x_user_id: str = Header(..., alias="
         "point_history": points_data["transaction_history"]
     }
 
-@router.delete("/cleanup/no-password-users")
-async def cleanup_no_password_users():
-    """
-    Delete all users who have no password set.
-    This is useful for cleaning up users who registered via Google OAuth but never set a password.
-    """
-    from utils.database import get_database_session, UserDB
-
-    users = _load_users()
-    users_without_password = []
-    users_with_password = []
-
-    # Identify users without passwords
-    for user in users:
-        password = user.get("password")
-        if password is None or password == "" or password == "null":
-            users_without_password.append(user)
-        else:
-            users_with_password.append(user)
-
-    # Get database session for direct operations
-    db = get_database_session()
-
-    try:
-        # Start transaction
-        with db.begin():
-            deleted_count = 0
-
-            # Delete users without passwords from database
-            for user_without_password in users_without_password:
-                user_id = user_without_password["id"]
-
-                # Delete from users table
-                deleted = db.query(UserDB).filter(UserDB.id == user_id).delete()
-
-                if deleted > 0:
-                    deleted_count += 1
-                    print(f"Deleted user {user_id} with no password")
-                else:
-                    print(f"Warning: Could not delete user {user_id}")
-
-        # Save the users with passwords back to maintain consistency
-        _save_users(users_with_password)
-
-        return {
-            "message": "Users without passwords cleanup completed",
-            "total_users_before": len(users),
-            "users_with_password_after": len(users_with_password),
-            "users_without_password_deleted": deleted_count,
-            "deleted_user_ids": [user["id"] for user in users_without_password[:10]],  # Show first 10 for reference
-            "examples_of_deleted_users": [
-                {
-                    "user_id": user["id"],
-                    "name": user.get("name"),
-                    "email": user.get("email"),
-                    "has_google_id": user.get("google_id") is not None
-                }
-                for user in users_without_password[:5]  # Show first 5 examples
-            ]
-        }
-
-    except Exception as e:
-        print(f"Error during cleanup: {e}")
-        raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
-    finally:
-        db.close()
