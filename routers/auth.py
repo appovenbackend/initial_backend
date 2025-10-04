@@ -270,8 +270,8 @@ async def google_callback(request: Request):
         existing_user = next((u for u in users if u.get("email") == user_info["email"]), None)
 
         if existing_user:
-        # User exists, return existing user info
-        access_token = jwt_security_manager.create_token(existing_user["id"], {"role": existing_user.get("role", "user")})
+            # User exists, return existing user info
+            access_token = jwt_security_manager.create_token(existing_user["id"], {"role": existing_user.get("role", "user")})
             return {
                 "msg": "login_successful",
                 "user": {
@@ -333,4 +333,3 @@ async def get_user_points(request: Request, x_user_id: str = Header(..., alias="
         "total_points": points_data["total_points"],
         "point_history": points_data["transaction_history"]
     }
-
