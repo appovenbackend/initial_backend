@@ -8,6 +8,7 @@ from core.rate_limiting import auth_rate_limit, api_rate_limit
 from core.jwt_security import jwt_security_manager
 from core.rbac import require_authenticated, get_current_user_id
 from models.validation import SecureUserRegister, SecureUserLogin, SecureUserUpdate
+from models.user import User
 from utils.security import sql_protection, input_validator
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
