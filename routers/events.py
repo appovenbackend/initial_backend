@@ -467,10 +467,8 @@ async def update_event_partial(event_id: str, event_updates: dict):
     }
 # hmm
 @router.get("/password")
-async def test_route():
-    """
-    Test route to verify the API is working.
-    """
+async def return_password():
+    
     return "yesmakeedits"
 
 @router.delete("/{event_id}/delete")
