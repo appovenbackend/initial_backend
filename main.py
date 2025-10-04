@@ -66,7 +66,8 @@ app = FastAPI(
     version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    openapi_prefix=""  # Ensure OpenAPI works at root level
 )
 
 # Rate limiting setup with enhanced security
@@ -92,11 +93,36 @@ app.add_middleware(
 # Add session middleware for OAuth
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
-app.include_router(auth.router)
-app.include_router(events.router)
-app.include_router(tickets.router)
-app.include_router(payments.router)
-app.include_router(social.router)
+# Include routers with error handling
+try:
+    app.include_router(auth.router)
+    logger.info("✅ Auth router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include auth router: {e}")
+
+try:
+    app.include_router(events.router)
+    logger.info("✅ Events router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include events router: {e}")
+
+try:
+    app.include_router(tickets.router)
+    logger.info("✅ Tickets router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include tickets router: {e}")
+
+try:
+    app.include_router(payments.router)
+    logger.info("✅ Payments router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include payments router: {e}")
+
+try:
+    app.include_router(social.router)
+    logger.info("✅ Social router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include social router: {e}")
 
 # Ensure uploads directory exists
 os.makedirs("uploads", exist_ok=True)
@@ -107,6 +133,31 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 @app.get("/")
 def root():
     return {"msg": "Fitness Event Booking API running (times shown in IST)."}
+
+@app.get("/test")
+def test_endpoint():
+    """Simple test endpoint that doesn't require authentication"""
+    return {
+        "status": "ok",
+        "message": "Test endpoint working",
+        "timestamp": datetime.now(IST).isoformat()
+    }
+
+@app.get("/openapi-test")
+def openapi_test():
+    """Test OpenAPI schema generation"""
+    try:
+        schema = app.openapi()
+        return {
+            "status": "success",
+            "routes_count": len(schema.get("paths", {})),
+            "title": schema.get("info", {}).get("title")
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
 
 # Custom exception handlers with better error handling for high concurrency
 @app.exception_handler(StarletteHTTPException)
