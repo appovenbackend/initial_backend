@@ -94,6 +94,12 @@ RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET")
 PAYMENT_CURRENCY = "INR"
 PAYMENT_TIMEOUT_MINUTES = 10
 
+# Security Configuration
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+MAX_REQUEST_SIZE = int(os.getenv("MAX_REQUEST_SIZE", "5242880"))  # 5MB default
+ENABLE_SECURITY_HEADERS = os.getenv("ENABLE_SECURITY_HEADERS", "true").lower() == "true"
+ENABLE_REQUEST_LOGGING = os.getenv("ENABLE_REQUEST_LOGGING", "true").lower() == "true"
+
 # QR token hardening
 QR_TOKEN_SHORT_TTL_SECONDS = int(os.getenv("QR_TOKEN_SHORT_TTL_SECONDS", "900"))  # 15m for on-demand short tokens
 JWT_KID = os.getenv("JWT_KID", "v1")

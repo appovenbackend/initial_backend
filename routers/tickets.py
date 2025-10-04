@@ -7,7 +7,10 @@ from core.config import IST
 
 from services.qr_service import create_qr_token
 from services.payment_service import razorpay_verify_signature
-from models.ticket import Ticket
+from core.rate_limiting import api_rate_limit, auth_rate_limit
+from core.rbac import require_authenticated, get_current_user_id
+from models.validation import SecureFreeRegistration, SecurePaymentRequest, SecureTicketValidation
+from utils.security import sql_protection, input_validator
 import json
 import logging
 from services.cache_service import get_cache, set_cache, delete_cache
@@ -105,12 +108,13 @@ def _to_ist(dt_iso: str):
 
 
 @router.post("/register/free", response_model=Ticket)
-async def register_free(payload: dict):
+@api_rate_limit("ticket_operations")
+async def register_free(payload: SecureFreeRegistration, request: Request):
     """
     payload: { "phone": "...", "eventId": "..." }
     """
-    phone = payload.get("phone")
-    eventId = payload.get("eventId")
+    phone = payload.phone
+    eventId = payload.eventId
     users = _load_users()
     user = next((u for u in users if u["phone"] == phone), None)
     if not user:
@@ -197,15 +201,16 @@ async def register_free(payload: dict):
     return new_ticket
 
 @router.post("/payments/verify", response_model=Ticket)
-async def payments_verify(payload: dict):
+@api_rate_limit("payment")
+async def payments_verify(payload: SecurePaymentRequest, request: Request):
     """Verify Razorpay signature and issue ticket on success.
     payload: { phone, eventId, razorpay_order_id, razorpay_payment_id, razorpay_signature }
     """
-    phone = payload.get("phone")
-    eventId = payload.get("eventId")
-    order_id = payload.get("razorpay_order_id")
-    payment_id = payload.get("razorpay_payment_id")
-    signature = payload.get("razorpay_signature")
+    phone = payload.phone
+    eventId = payload.eventId
+    order_id = payload.razorpay_order_id
+    payment_id = payload.razorpay_payment_id
+    signature = payload.razorpay_signature
 
     if not all([phone, eventId, order_id, payment_id, signature]):
         raise HTTPException(status_code=400, detail="Missing fields")
@@ -257,7 +262,14 @@ async def payments_verify(payload: dict):
     return new_ticket
 
 @router.get("/tickets/{user_id}")
-async def get_tickets_for_user(user_id: str):
+@api_rate_limit("authenticated")
+@require_authenticated
+async def get_tickets_for_user(user_id: str, request: Request):
+    # Security check - users can only view their own tickets
+    current_user_id = get_current_user_id(request)
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Can only view your own tickets")
+    
     tickets = _load_tickets()
     events = _load_events()
 
@@ -282,7 +294,14 @@ async def get_tickets_for_user(user_id: str):
     return enhanced_tickets
 
 @router.get("/tickets/ticket/{ticket_id}")
-async def get_ticket(ticket_id: str):
+@api_rate_limit("authenticated")
+@require_authenticated
+async def get_ticket(ticket_id: str, request: Request):
+    # Security check - users can only view their own tickets
+    current_user_id = get_current_user_id(request)
+    if t["userId"] != current_user_id:
+        raise HTTPException(status_code=403, detail="Can only view your own tickets")
+    
     tickets = _load_tickets()
     t = next((x for x in tickets if x["id"] == ticket_id), None)
     if not t:
@@ -301,7 +320,8 @@ async def get_ticket(ticket_id: str):
     return response
 
 @router.post("/receiveQrToken")
-async def receive_qr_token(token: str, eventId: str):
+@api_rate_limit("ticket_operations")
+async def receive_qr_token(token: str, eventId: str, request: Request):
     """
     Receives QR token string from frontend and stores it in database.
     """
@@ -331,7 +351,8 @@ async def receive_qr_token(token: str, eventId: str):
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @router.get("/getAllQrTokens")
-async def get_all_qr_tokens():
+@api_rate_limit("admin")
+async def get_all_qr_tokens(request: Request):
     """
     Retrieves all saved QR tokens from the database.
     """
@@ -339,7 +360,8 @@ async def get_all_qr_tokens():
     return {"qr_tokens": received_tokens, "count": len(received_tokens)}
 
 @router.get("/getQrTokensByEvent/{event_id}")
-async def get_qr_tokens_by_event(event_id: str):
+@api_rate_limit("admin")
+async def get_qr_tokens_by_event(event_id: str, request: Request):
     """
     Retrieves QR tokens for a specific event.
     """
@@ -350,14 +372,14 @@ async def get_qr_tokens_by_event(event_id: str):
 from fastapi import Request
 
 @router.post("/validate")
-
-async def validate_token(body: dict, request: Request):
+@api_rate_limit("ticket_operations")
+async def validate_token(body: SecureTicketValidation, request: Request):
     """
     Expects: { "token": "<jwt>", "eventId": "<event_id>" }
     Returns user + event info on first scan, or already_scanned on second.
     """
-    token = body.get("token")
-    eventId = body.get("eventId")
+    token = body.token
+    eventId = body.eventId
     if not token or not eventId:
         raise HTTPException(status_code=400, detail="token and eventId required")
     # decode token safely using jose

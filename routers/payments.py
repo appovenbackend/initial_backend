@@ -21,7 +21,9 @@ from core.config import (
 from services.payment_service import razorpay_create_order, razorpay_verify_signature
 from utils.database import read_users, read_events, read_tickets, write_tickets
 from services.qr_service import create_qr_token
-from models.ticket import Ticket
+from core.rate_limiting import api_rate_limit
+from models.validation import SecurePaymentRequest
+from utils.security import sql_protection, input_validator
 from jose import jwt, JWTError
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -45,7 +47,7 @@ def _to_ist(dt_iso: str):
     return dt.astimezone(IST)
 
 @router.post("/order")
-@limiter.limit("10/minute")
+@api_rate_limit("payment")
 async def create_payment_order(
     request: Request,
     phone: str = Query(..., description="User phone number"),
@@ -61,6 +63,13 @@ async def create_payment_order(
 
     if not phone or not event_id:
         raise HTTPException(status_code=400, detail="phone and eventId required")
+    
+    # Validate input formats
+    if not input_validator.validate_phone_number(phone):
+        raise HTTPException(status_code=400, detail="Invalid phone number format")
+    
+    if not input_validator.validate_event_id(event_id):
+        raise HTTPException(status_code=400, detail="Invalid event ID format")
 
     # Get user and event
     users = read_users()
@@ -109,8 +118,8 @@ async def create_payment_order(
         raise HTTPException(status_code=500, detail="Failed to create payment order")
 
 @router.post("/verify")
-@limiter.limit("20/minute")
-async def verify_payment(request: Request, payload: dict):
+@api_rate_limit("payment")
+async def verify_payment(request: Request, payload: SecurePaymentRequest):
     """
     Verify Razorpay payment and issue ticket.
 
@@ -122,11 +131,11 @@ async def verify_payment(request: Request, payload: dict):
         "eventId": "..."
     }
     """
-    order_id = payload.get("razorpay_order_id")
-    payment_id = payload.get("razorpay_payment_id")
-    signature = payload.get("razorpay_signature")
-    phone = payload.get("phone")
-    event_id = payload.get("eventId")
+    order_id = payload.razorpay_order_id
+    payment_id = payload.razorpay_payment_id
+    signature = payload.razorpay_signature
+    phone = payload.phone
+    event_id = payload.eventId
 
     if not all([order_id, payment_id, signature, phone, event_id]):
         raise HTTPException(status_code=400, detail="All payment fields required")
@@ -225,7 +234,7 @@ async def verify_payment(request: Request, payload: dict):
     }
 
 @router.post("/webhook")
-@limiter.limit("100/minute")
+@api_rate_limit("payment")
 async def razorpay_webhook(request: Request):
     """
     Handle Razorpay webhook events for async payment processing.
@@ -342,7 +351,8 @@ async def razorpay_webhook(request: Request):
         raise HTTPException(status_code=500, detail="Webhook processing failed")
 
 @router.get("/orders/{order_id}")
-async def get_order_status(order_id: str):
+@api_rate_limit("payment")
+async def get_order_status(order_id: str, request: Request):
     """Get payment order status"""
     if order_id not in payment_orders:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -358,7 +368,8 @@ async def get_order_status(order_id: str):
     }
 
 @router.get("/test")
-async def test_payment_integration():
+@api_rate_limit("admin")
+async def test_payment_integration(request: Request):
     """Test endpoint to verify Razorpay configuration"""
     return {
         "razorpay_configured": bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET),

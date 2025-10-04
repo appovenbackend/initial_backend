@@ -2,7 +2,10 @@ from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from uuid import uuid4
 from datetime import datetime, timedelta
 from dateutil import parser
-from models.event import CreateEventIn, Event
+from core.rate_limiting import api_rate_limit, generous_rate_limit
+from core.rbac import require_role, UserRole, get_current_user_id
+from models.validation import SecureEventCreate, SecureEventUpdate
+from utils.security import sql_protection, input_validator
 from models.user import User
 from models.ticket import Ticket
 from utils.database import read_events, write_events, read_tickets, read_users, TicketDB, ReceivedQrTokenDB, EventDB
@@ -82,7 +85,8 @@ def _cache_invalidate_events_list():
     delete_cache(_EVENTS_CACHE_KEY)
 
 @router.post("/", response_model=Event)
-async def create_event(ev: CreateEventIn):
+@api_rate_limit("event_creation")
+async def create_event(ev: SecureEventCreate, request: Request):
     new_ev = Event(
         id="evt_" + uuid4().hex[:10],
         title=ev.title,
@@ -120,7 +124,8 @@ async def create_event(ev: CreateEventIn):
     return new_ev
 
 @router.get("/", response_model=List[Event])
-async def list_events():
+@api_rate_limit("public_read")
+async def list_events(request: Request):
     # Cache first (Redis)
     cached = _cache_get_events_list()
     if cached is not None:
@@ -159,7 +164,7 @@ async def list_events():
     return results
 
 @router.get("/all", response_model=List[Event])
-
+@api_rate_limit("admin")
 async def get_all_events(request: Request):
     """
     Get ALL events including deactivated and expired events.
@@ -186,7 +191,7 @@ async def get_all_events(request: Request):
         raise HTTPException(status_code=500, detail=f"Failed to retrieve all events: {str(e)}")
 
 @router.get("/recent", response_model=List[Event])
-
+@api_rate_limit("public_read")
 async def list_recent_events(request: Request, limit: int = 10):
     """
     Get the most recent events by creation date.
@@ -215,7 +220,8 @@ async def list_recent_events(request: Request, limit: int = 10):
     return result
 
 @router.get("/{event_id}", response_model=Event)
-async def get_event(event_id: str):
+@api_rate_limit("public_read")
+async def get_event(event_id: str, request: Request):
     events = _load_events()
     e = next((x for x in events if x["id"] == event_id), None)
     if not e:
@@ -234,7 +240,7 @@ async def get_event(event_id: str):
     return Event(**e)
 
 @router.get("/{event_id}/registered_users")
-
+@api_rate_limit("admin")
 async def get_registered_users_for_event(request: Request, event_id: str):
     # Check if event exists
     events = _load_events()
@@ -269,7 +275,8 @@ async def get_registered_users_for_event(request: Request, event_id: str):
     }
 
 @router.put("/{event_id}/update_price")
-async def update_event_price(event_id: str, new_price: int):
+@api_rate_limit("admin")
+async def update_event_price(event_id: str, new_price: int, request: Request):
     if new_price < 0:
         raise HTTPException(status_code=400, detail="Price cannot be negative")
     
@@ -284,7 +291,8 @@ async def update_event_price(event_id: str, new_price: int):
     return {"message": "Event price updated successfully", "new_price": new_price}
 
 @router.patch("/{event_id}")
-async def update_event_partial(event_id: str, event_updates: dict):
+@api_rate_limit("admin")
+async def update_event_partial(event_id: str, event_updates: SecureEventUpdate, request: Request):
     """
     Update an existing event with partial data.
     Only provided fields will be updated, others remain unchanged.
@@ -308,134 +316,16 @@ async def update_event_partial(event_id: str, event_updates: dict):
     # Create a copy of existing event to modify
     updated_event = existing_event.copy()
 
-    # Validate and update only provided fields
-    validation_errors = []
-
-    # Validate title if provided
-    if "title" in event_updates:
-        if not event_updates["title"] or not event_updates["title"].strip():
-            validation_errors.append("Title cannot be empty")
-        else:
-            updated_event["title"] = event_updates["title"].strip()
-
-    # Validate description if provided
-    if "description" in event_updates:
-        if not event_updates["description"] or not event_updates["description"].strip():
-            validation_errors.append("Description cannot be empty")
-        else:
-            updated_event["description"] = event_updates["description"].strip()
-
-    # Validate city if provided
-    if "city" in event_updates:
-        if not event_updates["city"] or not event_updates["city"].strip():
-            validation_errors.append("City cannot be empty")
-        else:
-            updated_event["city"] = event_updates["city"].strip()
-
-    # Validate venue if provided
-    if "venue" in event_updates:
-        if not event_updates["venue"] or not event_updates["venue"].strip():
-            validation_errors.append("Venue cannot be empty")
-        else:
-            updated_event["venue"] = event_updates["venue"].strip()
-
-    # Validate dates if provided
-    if "startAt" in event_updates or "endAt" in event_updates:
-        start_date = event_updates.get("startAt", updated_event["startAt"])
-        end_date = event_updates.get("endAt", updated_event["endAt"])
-
-        try:
-            start_dt = parser.isoparse(start_date)
-            end_dt = parser.isoparse(end_date)
-            if end_dt <= start_dt:
-                validation_errors.append("End date must be after start date")
-            else:
-                updated_event["startAt"] = start_date
-                updated_event["endAt"] = end_date
-        except Exception:
-            validation_errors.append("Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS)")
-
-    # Validate price if provided
-    if "priceINR" in event_updates:
-        try:
-            price = int(event_updates["priceINR"])
-            if price < 0:
-                validation_errors.append("Price cannot be negative")
-            else:
-                updated_event["priceINR"] = price
-        except (ValueError, TypeError):
-            validation_errors.append("Price must be a valid number")
-
-    # Validate bannerUrl if provided
-    if "bannerUrl" in event_updates:
-        # Allow empty bannerUrl (optional field)
-        updated_event["bannerUrl"] = event_updates["bannerUrl"]
-
-    # Validate isActive if provided
-    if "isActive" in event_updates:
-        try:
-            is_active = bool(event_updates["isActive"])
-            updated_event["isActive"] = is_active
-        except (ValueError, TypeError):
-            validation_errors.append("isActive must be a boolean value")
-
-    # Validate organizerName if provided
-    if "organizerName" in event_updates:
-        organizer_name = event_updates["organizerName"]
-        if organizer_name is not None and (not isinstance(organizer_name, str) or not organizer_name.strip()):
-            validation_errors.append("organizerName must be a non-empty string or null")
-        else:
-            updated_event["organizerName"] = organizer_name
-
-    # Validate organizerLogo if provided
-    if "organizerLogo" in event_updates:
-        organizer_logo = event_updates["organizerLogo"]
-        if organizer_logo is not None and (not isinstance(organizer_logo, str) or not organizer_logo.strip()):
-            validation_errors.append("organizerLogo must be a valid URL string or null")
-        else:
-            updated_event["organizerLogo"] = organizer_logo
-
-    # Validate coordinate_lat if provided
-    if "coordinate_lat" in event_updates:
-        coordinate_lat = event_updates["coordinate_lat"]
-        if coordinate_lat is not None and (not isinstance(coordinate_lat, str) or not coordinate_lat.strip()):
-            validation_errors.append("coordinate_lat must be a valid string or null")
-        else:
-            updated_event["coordinate_lat"] = coordinate_lat
-
-    # Validate coordinate_long if provided
-    if "coordinate_long" in event_updates:
-        coordinate_long = event_updates["coordinate_long"]
-        if coordinate_long is not None and (not isinstance(coordinate_long, str) or not coordinate_long.strip()):
-            validation_errors.append("coordinate_long must be a valid string or null")
-        else:
-            updated_event["coordinate_long"] = coordinate_long
-
-    # Validate address_url if provided
-    if "address_url" in event_updates:
-        address_url = event_updates["address_url"]
-        if address_url is not None and (not isinstance(address_url, str) or not address_url.strip()):
-            validation_errors.append("address_url must be a valid URL string or null")
-        else:
-            updated_event["address_url"] = address_url
-
-    # Validate registration_link if provided
-    if "registration_link" in event_updates:
-        registration_link = event_updates["registration_link"]
-        if registration_link is not None and (not isinstance(registration_link, str) or not registration_link.strip()):
-            validation_errors.append("registration_link must be a valid URL string or null")
-        else:
-            updated_event["registration_link"] = registration_link
-
-    # Check for validation errors
-    if validation_errors:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "message": "Validation failed",
-                "errors": validation_errors
-            }
-        )
+    # Convert Pydantic model to dict and update only provided fields
+    event_updates_dict = event_updates.dict(exclude_unset=True)
+    
+    # Sanitize input data
+    sanitized_updates = sql_protection.validate_input(event_updates_dict)
+    
+    # Update fields
+    for key, value in sanitized_updates.items():
+        if value is not None:
+            updated_event[key] = value
 
     # Preserve the original createdAt timestamp
     updated_event["createdAt"] = existing_event["createdAt"]
@@ -455,7 +345,7 @@ async def update_event_partial(event_id: str, event_updates: dict):
             if u.get("phone") and event_id in (u.get("subscribedEvents") or [])
         ]
         if subscriber_phones:
-            await send_bulk_text(subscriber_phones, format_event_update(updated_event, list(event_updates.keys())))
+            await send_bulk_text(subscriber_phones, format_event_update(updated_event, list(sanitized_updates.keys())))
     except Exception:
         pass
 
@@ -463,17 +353,12 @@ async def update_event_partial(event_id: str, event_updates: dict):
     return {
         "message": "Event updated successfully",
         "event": Event(**updated_event),
-        "updated_fields": list(event_updates.keys())
+        "updated_fields": list(sanitized_updates.keys())
     }
-@router.get("/password")
-async def return_password():
-    """
-    Test route that returns a password string.
-    """
-    return "yesmakeedits"
+
 
 @router.delete("/{event_id}/delete")
-
+@api_rate_limit("admin")
 async def delete_event(request: Request, event_id: str):
     """
     Delete an event completely from the database.

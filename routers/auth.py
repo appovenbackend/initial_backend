@@ -4,7 +4,11 @@ from datetime import datetime, timedelta
 from utils.database import read_users, write_users
 from core.config import IST, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SECRET_KEY, ALGORITHM
 from core.security import hash_password, verify_password, create_access_token
-from models.user import UserIn, User, UserUpdate, UserRegister, UserLogin
+from core.rate_limiting import auth_rate_limit, api_rate_limit
+from core.jwt_security import jwt_security_manager
+from core.rbac import require_authenticated, get_current_user_id
+from models.validation import SecureUserRegister, SecureUserLogin, SecureUserUpdate
+from utils.security import sql_protection, input_validator
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 import os
@@ -32,7 +36,8 @@ def _save_users(data):
     write_users(data)
 
 @router.post("/register")
-async def register(user_register: UserRegister):
+@auth_rate_limit("register")
+async def register(user_register: SecureUserRegister, request: Request):
     try:
         users = _load_users()
 
@@ -60,8 +65,8 @@ async def register(user_register: UserRegister):
         users.append(new_user)
         _save_users(users)
 
-        # Create access token
-        access_token = create_access_token(subject=new_user["id"])
+        # Create access token using enhanced JWT security
+        access_token = jwt_security_manager.create_token(new_user["id"], {"role": "user"})
 
         return {
             "msg": "User registered successfully",
@@ -81,7 +86,8 @@ async def register(user_register: UserRegister):
         raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
 
 @router.post("/login")
-async def login(user_login: UserLogin):
+@auth_rate_limit("login")
+async def login(user_login: SecureUserLogin, request: Request):
     try:
         users = _load_users()
 
@@ -98,8 +104,8 @@ async def login(user_login: UserLogin):
         if not verify_password(user_login.password, user["password"]):
             raise HTTPException(status_code=401, detail="Invalid password")
 
-        # Create access token
-        access_token = create_access_token(subject=user["id"])
+        # Create access token using enhanced JWT security
+        access_token = jwt_security_manager.create_token(user["id"], {"role": user.get("role", "user")})
 
         return {
             "msg": "login_successful",
@@ -123,7 +129,8 @@ async def login(user_login: UserLogin):
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 @router.get("/users")
-async def get_all_users():
+@api_rate_limit("admin")
+async def get_all_users(request: Request):
     users = _load_users()
     return {"users": users}
 
@@ -136,6 +143,8 @@ async def get_user_by_phone(phone: str):
     return user
 
 @router.put("/user/{user_id}")
+@api_rate_limit("authenticated")
+@require_authenticated
 async def update_user(
     user_id: str,
     name: str = Form(None),
@@ -144,22 +153,42 @@ async def update_user(
     bio: str = Form(None),
     strava_link: str = Form(None),
     instagram_id: str = Form(None),
-    picture: UploadFile = File(None)
+    picture: UploadFile = File(None),
+    request: Request = None
 ):
+    # Security check - users can only update their own profile
+    current_user_id = get_current_user_id(request)
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Can only update your own profile")
+    
     users = _load_users()
     user = next((u for u in users if u["id"] == user_id), None)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Sanitize input data
+    update_data = {
+        "name": name,
+        "phone": phone,
+        "email": email,
+        "bio": bio,
+        "strava_link": strava_link,
+        "instagram_id": instagram_id
+    }
+    sanitized_data = sql_protection.validate_input(update_data)
+
     # Update only provided fields
     updated = False
 
-    if name is not None and name.strip():
-        user["name"] = name.strip()
+    if sanitized_data["name"] is not None and sanitized_data["name"].strip():
+        user["name"] = sanitized_data["name"].strip()
         updated = True
 
-    if phone is not None and phone.strip():
-        new_phone = phone.strip()
+    if sanitized_data["phone"] is not None and sanitized_data["phone"].strip():
+        new_phone = sanitized_data["phone"].strip()
+        # Validate phone format
+        if not input_validator.validate_phone_number(new_phone):
+            raise HTTPException(status_code=400, detail="Invalid phone number format")
         # Check if phone number already exists for another user
         existing_phone_user = next((u for u in users if u["phone"] == new_phone and u["id"] != user_id), None)
         if existing_phone_user:
@@ -167,20 +196,27 @@ async def update_user(
         user["phone"] = new_phone
         updated = True
 
-    if email is not None and email.strip():
-        user["email"] = email.strip()
+    if sanitized_data["email"] is not None and sanitized_data["email"].strip():
+        email = sanitized_data["email"].strip()
+        # Validate email format
+        if not input_validator.validate_email(email):
+            raise HTTPException(status_code=400, detail="Invalid email format")
+        user["email"] = email
         updated = True
 
-    if bio is not None:
-        user["bio"] = bio.strip() if bio.strip() else None
+    if sanitized_data["bio"] is not None:
+        user["bio"] = sanitized_data["bio"].strip() if sanitized_data["bio"].strip() else None
         updated = True
 
-    if strava_link is not None:
-        user["strava_link"] = strava_link.strip() if strava_link.strip() else None
+    if sanitized_data["strava_link"] is not None:
+        strava_link = sanitized_data["strava_link"].strip() if sanitized_data["strava_link"].strip() else None
+        if strava_link and not input_validator.validate_url(strava_link):
+            raise HTTPException(status_code=400, detail="Invalid Strava link format")
+        user["strava_link"] = strava_link
         updated = True
 
-    if instagram_id is not None:
-        user["instagram_id"] = instagram_id.strip() if instagram_id.strip() else None
+    if sanitized_data["instagram_id"] is not None:
+        user["instagram_id"] = sanitized_data["instagram_id"].strip() if sanitized_data["instagram_id"].strip() else None
         updated = True
 
     if picture is not None:
@@ -188,8 +224,9 @@ async def update_user(
         upload_dir = Path("uploads/profiles")
         upload_dir.mkdir(parents=True, exist_ok=True)
 
-        # Generate unique filename
+        # Generate unique filename with security validation
         file_extension = Path(picture.filename).suffix
+        sanitized_filename = input_validator.sanitize_filename(picture.filename)
         unique_filename = f"{user_id}_{uuid4().hex[:8]}{file_extension}"
         file_path = upload_dir / unique_filename
 
@@ -214,6 +251,7 @@ async def return_password():
 
 # Google OAuth routes
 @router.get("/google_login")
+@auth_rate_limit("google_auth")
 async def google_login(request: Request):
     redirect_uri = request.url_for("google_callback")
     return await oauth.google.authorize_redirect(request, redirect_uri)
@@ -232,8 +270,8 @@ async def google_callback(request: Request):
         existing_user = next((u for u in users if u.get("email") == user_info["email"]), None)
 
         if existing_user:
-            # User exists, return existing user info
-            access_token = create_access_token(subject=existing_user["id"])
+        # User exists, return existing user info
+        access_token = jwt_security_manager.create_token(existing_user["id"], {"role": existing_user.get("role", "user")})
             return {
                 "msg": "login_successful",
                 "user": {
@@ -263,7 +301,7 @@ async def google_callback(request: Request):
         ).dict()
         users.append(new_user)
         _save_users(users)
-        access_token = create_access_token(subject=new_user["id"])
+        access_token = jwt_security_manager.create_token(new_user["id"], {"role": "user"})
         return {
             "msg": "registered",
             "user": {

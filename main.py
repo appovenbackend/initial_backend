@@ -11,8 +11,10 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from middleware.security import SecurityHeadersMiddleware, RequestSizeLimitMiddleware, SecurityLoggingMiddleware
+from core.rate_limiting import limiter
 from routers import auth, events, tickets, payments, social
-from core.config import SECRET_KEY, IST
+from core.config import SECRET_KEY, IST, MAX_REQUEST_SIZE
 from utils.database import read_events, write_events, get_database_session
 from core.config import USE_POSTGRESQL, DATABASE_URL
 from services.cache_service import get_cache, set_cache, is_cache_healthy
@@ -60,10 +62,15 @@ initialize_sample_data()
 
 app = FastAPI(title="Fitness Event Booking API (IST)")
 
-# Rate limiting setup
+# Rate limiting setup with enhanced security
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+# Security middleware (order matters!)
+app.add_middleware(SecurityLoggingMiddleware)  # First - log all requests
+app.add_middleware(RequestSizeLimitMiddleware, max_size=MAX_REQUEST_SIZE)  # Configurable limit
+app.add_middleware(SecurityHeadersMiddleware)  # Add security headers
 
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 

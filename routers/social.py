@@ -2,11 +2,14 @@ from fastapi import APIRouter, HTTPException, Depends, Request, Header
 from uuid import uuid4
 from datetime import datetime
 from typing import List, Optional
+from core.rate_limiting import api_rate_limit
+from core.rbac import require_authenticated, get_current_user_id
+from utils.security import sql_protection, input_validator
+from models.user import User
 from models.user_follow import (
     UserConnection, ConnectionRequest, ConnectionResponse,
     UserProfileResponse, ConnectionRequestItem
 )
-from models.user import User
 from utils.database import (
     read_users, write_users, read_user_follows, write_user_follows,
     read_events, read_tickets
@@ -135,6 +138,8 @@ def _build_profile_response(user: dict, viewer_id: str = None, connections: list
     return response
 
 @router.get("/users/{user_id}", response_model=UserProfileResponse)
+@api_rate_limit("social_operations")
+@require_authenticated
 async def get_user_profile(
     user_id: str,
     request: Request,
@@ -192,6 +197,8 @@ async def update_privacy_setting(
     return {"message": f"Account toggled to {'private' if new_state else 'public'}", "is_private": new_state}
 
 @router.post("/users/{user_id}/connect", response_model=ConnectionResponse)
+@api_rate_limit("social_operations")
+@require_authenticated
 async def request_connection(
     user_id: str,
     request: Request,
@@ -271,6 +278,8 @@ async def disconnect_user(
     return {"message": "Connection removed"}
 
 @router.get("/connection-requests", response_model=List[ConnectionRequestItem])
+@api_rate_limit("social_operations")
+@require_authenticated
 async def get_follow_requests(
     request: Request,
     x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")
@@ -420,6 +429,8 @@ async def get_my_connections(
     return {"connections": connections, "count": len(connections)}
 
 @router.get("/feed")
+@api_rate_limit("social_operations")
+@require_authenticated
 async def get_activity_feed(
     request: Request,
     limit: int = 20,
@@ -488,6 +499,8 @@ async def admin_notify_event_subscribers(event_id: str, message: str):
     return {"sent": sent, "total": len(phones)}
 
 @router.get("/users/search")
+@api_rate_limit("social_operations")
+@require_authenticated
 async def search_users(
     q: str,
     request: Request,
@@ -500,11 +513,16 @@ async def search_users(
     if not q or len(q.strip()) < 2:
         raise HTTPException(status_code=400, detail="Search query must be at least 2 characters")
 
+    # Sanitize search query
+    sanitized_query = sql_protection.sanitize_string(q.strip())
+    if not sanitized_query or len(sanitized_query) < 2:
+        raise HTTPException(status_code=400, detail="Invalid search query")
+
     users = _load_users()
     follows = _load_user_follows()
 
     # Search users by name (case insensitive)
-    query = q.strip().lower()
+    query = sanitized_query.lower()
     matching_users = [
         u for u in users
         if query in u['name'].lower() and u['id'] != current_user_id
