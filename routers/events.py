@@ -465,10 +465,11 @@ async def update_event_partial(event_id: str, event_updates: dict):
         "event": Event(**updated_event),
         "updated_fields": list(event_updates.keys())
     }
-# hmm
 @router.get("/password")
 async def return_password():
-    
+    """
+    Test route that returns a password string.
+    """
     return "yesmakeedits"
 
 @router.delete("/{event_id}/delete")
