@@ -466,19 +466,66 @@ async def update_event_partial(event_id: str, event_updates: dict):
         "updated_fields": list(event_updates.keys())
     }
 
-@router.put("/{event_id}/deactivate")
+@router.delete("/{event_id}/delete")
 
-async def deactivate_event(request: Request, event_id: str):
+async def delete_event(request: Request, event_id: str):
+    """
+    Delete an event completely from the database.
+    This will also delete all associated tickets and received QR tokens.
+    """
+    from utils.database import get_database_session, read_tickets, read_received_qr_tokens
+
+    # Check if event exists
     events = _load_events()
-    e = next((x for x in events if x["id"] == event_id), None)
-    if not e:
+    event = next((x for x in events if x["id"] == event_id), None)
+    if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    if not e.get("isActive", True):
-        raise HTTPException(status_code=400, detail="Event already inactive")
-    e["isActive"] = False
-    _save_events(events)  # Pass all events for update
-    _cache_invalidate_events_list()
-    return {"message": "Event deactivated successfully"}
+
+    # Get database session for direct operations
+    db = get_database_session()
+
+    try:
+        # Start transaction
+        with db.begin():
+            # Delete all tickets for this event
+            tickets_deleted = db.query(TicketDB).filter(TicketDB.eventId == event_id).delete()
+
+            # Delete all received QR tokens for this event
+            tokens_deleted = db.query(ReceivedQrTokenDB).filter(ReceivedQrTokenDB.eventId == event_id).delete()
+
+            # Remove event from featured slots if it exists
+            current_slots = get_featured_slots()
+            slots_cleared = []
+            for slot_name, slot_event_id in current_slots.items():
+                if slot_event_id == event_id:
+                    clear_featured_slot(slot_name)
+                    slots_cleared.append(slot_name)
+
+            # Delete the event itself
+            event_deleted = db.query(EventDB).filter(EventDB.id == event_id).delete()
+
+            if event_deleted == 0:
+                raise HTTPException(status_code=404, detail="Event not found")
+
+        # Invalidate cache
+        _cache_invalidate_events_list()
+
+        return {
+            "message": "Event deleted successfully",
+            "event_id": event_id,
+            "event_title": event.get("title"),
+            "tickets_deleted": tickets_deleted,
+            "tokens_deleted": tokens_deleted,
+            "featured_slots_cleared": slots_cleared
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting event: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete event: {str(e)}")
+    finally:
+        db.close()
 
 @router.put("/{event_id}/toggle-activation")
 
