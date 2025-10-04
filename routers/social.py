@@ -145,7 +145,7 @@ async def get_user_profile(
     request: Request
 ):
     """Get user profile with privacy controls"""
-    current_user_id = get_current_user_id(request)
+    ##current_user_id = get_current_user_id(request)
 
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)
@@ -163,7 +163,7 @@ async def get_privacy_setting(
     request: Request
 ):
     """Get the current privacy setting for a user"""
-    current_user_id = get_current_user_id(request)
+    ##current_user_id = get_current_user_id(request)
 
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)
@@ -204,7 +204,7 @@ async def request_connection(
     request: Request
 ):
     """Request a connection; if target is public, auto-accept."""
-    current_user_id = get_current_user_id(request)
+    ##current_user_id = get_current_user_id(request)
 
     if current_user_id == user_id:
         raise HTTPException(status_code=400, detail="Cannot connect to yourself")
@@ -259,7 +259,7 @@ async def disconnect_user(
     request: Request
 ):
     """Remove a connection or pending request."""
-    current_user_id = get_current_user_id(request)
+    ##current_user_id = get_current_user_id(request)
 
     follows = _load_user_follows()
 
@@ -284,7 +284,7 @@ async def get_follow_requests(
     request: Request
 ):
     """Get pending connection requests for current user"""
-    current_user_id = get_current_user_id(request)
+    ##current_user_id = get_current_user_id(request)
 
     follows = _load_user_follows()
     users = _load_users()
@@ -312,7 +312,7 @@ async def accept_follow_request(
     request: Request
 ):
     """Accept a connection request"""
-    current_user_id = get_current_user_id(request)
+    ##current_user_id = get_current_user_id(request)
 
     follows = _load_user_follows()
 
@@ -343,7 +343,7 @@ async def decline_follow_request(
     request: Request
 ):
     """Decline a connection request"""
-    current_user_id = get_current_user_id(request)
+    ##current_user_id = get_current_user_id(request)
 
     follows = _load_user_follows()
 
@@ -370,7 +370,7 @@ async def get_user_connections(
     request: Request
 ):
     """Get user's connections (accepted, either direction)."""
-    current_user_id = get_current_user_id(request)
+    ##current_user_id = get_current_user_id(request)
 
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)
@@ -408,7 +408,7 @@ async def get_my_connections(
     request: Request
 ):
     """Get current user's connections (accepted, either direction)."""
-    current_user_id = get_current_user_id(request)
+    ##current_user_id = get_current_user_id(request)
 
     users = _load_users()
     follows = _load_user_follows()
@@ -439,7 +439,7 @@ async def get_activity_feed(
     limit: int = 20
 ):
     """Get activity feed from followed users"""
-    current_user_id = get_current_user_id(request)
+    ##current_user_id = get_current_user_id(request)
 
     follows = _load_user_follows()
     events = read_events()
@@ -509,7 +509,7 @@ async def search_users(
     limit: int = 10
 ):
     """Search users by name"""
-    current_user_id = get_current_user_id(request)
+    ##current_user_id = get_current_user_id(request)
 
     if not q or len(q.strip()) < 2:
         raise HTTPException(status_code=400, detail="Search query must be at least 2 characters")

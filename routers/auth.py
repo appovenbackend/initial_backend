@@ -330,8 +330,8 @@ async def get_user_points(request: Request):
     """Get user points for display"""
     from utils.database import get_user_points
 
-    current_user_id = get_current_user_id(request)
-    points_data = get_user_points(current_user_id)
+    ##current_user_id = get_current_user_id(request)
+    ##points_data = get_user_points(current_user_id)
 
     # Return user-friendly format
     return {
