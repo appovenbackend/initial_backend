@@ -261,6 +261,8 @@ async def get_tickets_for_user(user_id: str):
             if event:
                 # Add event name and other details
                 ticket_with_event = ticket.copy()
+                # Surface validation status consistently as snake_case too
+                ticket_with_event["is_validated"] = bool(ticket.get("isValidated", False))
                 ticket_with_event["eventName"] = event["title"]
                 ticket_with_event["eventCity"] = event["city"]
                 ticket_with_event["eventVenue"] = event["venue"]
@@ -285,6 +287,7 @@ async def get_ticket(ticket_id: str):
 
     # Return ticket with event details
     response = t.copy()
+    response["is_validated"] = bool(t.get("isValidated", False))
     response["event"] = event
     return response
 
@@ -338,7 +341,7 @@ async def get_qr_tokens_by_event(event_id: str):
 from fastapi import Request
 
 @router.post("/validate")
-@limiter.limit("120/minute")
+
 async def validate_token(body: dict, request: Request):
     """
     Expects: { "token": "<jwt>", "eventId": "<event_id>" }

@@ -234,7 +234,7 @@ async def get_event(event_id: str):
     return Event(**e)
 
 @router.get("/{event_id}/registered_users")
-@limiter.limit("20/minute")
+
 async def get_registered_users_for_event(request: Request, event_id: str):
     # Check if event exists
     events = _load_events()
@@ -249,13 +249,23 @@ async def get_registered_users_for_event(request: Request, event_id: str):
     # Get unique user IDs
     user_ids = list(set(t["userId"] for t in event_tickets))
 
-    # Load users
+    # Pre-compute which users have at least one validated ticket for this event
+    validated_user_ids = set(
+        t["userId"] for t in event_tickets if t.get("isValidated", False)
+    )
+
+    # Load users and include validation status
     users = read_users()
-    registered_users = [User(**u) for u in users if u["id"] in user_ids]
+    users_with_status = []
+    for u in users:
+        if u["id"] in user_ids:
+            user_entry = u.copy()
+            user_entry["is_validated"] = u["id"] in validated_user_ids
+            users_with_status.append(user_entry)
 
     return {
-        "count": len(registered_users),
-        "users": registered_users
+        "count": len(users_with_status),
+        "users": users_with_status
     }
 
 @router.put("/{event_id}/update_price")
