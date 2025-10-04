@@ -126,10 +126,17 @@ async def register_free(payload: dict):
     ev = next((e for e in events if e["id"] == eventId), None)
     if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
-    # expire check
+    # expire check - only check if event has ended, not if it hasn't started yet
     try:
-        if _to_ist(ev["endAt"]) <= datetime.now(IST) or not ev.get("isActive", True):
-            raise HTTPException(status_code=400, detail="Event not active/expired")
+        end_time = _to_ist(ev["endAt"])
+        current_time = datetime.now(IST)
+
+        # Only reject if event has already ended OR if event is explicitly inactive
+        if end_time <= current_time or not ev.get("isActive", True):
+            if end_time <= current_time:
+                raise HTTPException(status_code=400, detail="Event has already ended")
+            else:
+                raise HTTPException(status_code=400, detail="Event is not active")
     except HTTPException:
         raise
     # capacity check
