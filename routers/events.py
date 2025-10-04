@@ -466,6 +466,13 @@ async def update_event_partial(event_id: str, event_updates: dict):
         "updated_fields": list(event_updates.keys())
     }
 
+@router.get("/test")
+async def test_route():
+    """
+    Test route to verify the API is working.
+    """
+    return "yesmakeedits"
+
 @router.delete("/{event_id}/delete")
 
 async def delete_event(request: Request, event_id: str):
