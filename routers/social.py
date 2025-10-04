@@ -139,7 +139,7 @@ def _build_profile_response(user: dict, viewer_id: str = None, connections: list
 
 @router.get("/users/{user_id}", response_model=UserProfileResponse)
 @api_rate_limit("social_operations")
-@require_authenticated
+###@require_authenticated
 async def get_user_profile(
     user_id: str,
     request: Request
@@ -157,7 +157,7 @@ async def get_user_profile(
 
 @router.get("/users/{user_id}/privacy")
 @api_rate_limit("social_operations")
-@require_authenticated
+###@require_authenticated
 async def get_privacy_setting(
     user_id: str,
     request: Request
@@ -198,7 +198,7 @@ async def update_privacy_setting(
 
 @router.post("/users/{user_id}/connect", response_model=ConnectionResponse)
 @api_rate_limit("social_operations")
-@require_authenticated
+###@require_authenticated
 async def request_connection(
     user_id: str,
     request: Request
@@ -253,7 +253,7 @@ async def request_connection(
 
 @router.delete("/users/{user_id}/disconnect")
 @api_rate_limit("social_operations")
-@require_authenticated
+###@require_authenticated
 async def disconnect_user(
     user_id: str,
     request: Request
@@ -279,7 +279,7 @@ async def disconnect_user(
 
 @router.get("/connection-requests", response_model=List[ConnectionRequestItem])
 @api_rate_limit("social_operations")
-@require_authenticated
+###@require_authenticated
 async def get_follow_requests(
     request: Request
 ):
@@ -306,7 +306,7 @@ async def get_follow_requests(
 
 @router.post("/connection-requests/{request_id}/accept")
 @api_rate_limit("social_operations")
-@require_authenticated
+###@require_authenticated
 async def accept_follow_request(
     request_id: str,
     request: Request
@@ -337,7 +337,7 @@ async def accept_follow_request(
 
 @router.post("/connection-requests/{request_id}/decline")
 @api_rate_limit("social_operations")
-@require_authenticated
+###@require_authenticated
 async def decline_follow_request(
     request_id: str,
     request: Request
@@ -364,7 +364,7 @@ async def decline_follow_request(
 
 @router.get("/users/{user_id}/connections")
 @api_rate_limit("social_operations")
-@require_authenticated
+####@require_authenticated
 async def get_user_connections(
     user_id: str,
     request: Request
@@ -403,7 +403,7 @@ async def get_user_connections(
 
 @router.get("/connections")
 @api_rate_limit("social_operations")
-@require_authenticated
+#####@require_authenticated
 async def get_my_connections(
     request: Request
 ):
@@ -433,7 +433,7 @@ async def get_my_connections(
 
 @router.get("/feed")
 @api_rate_limit("social_operations")
-@require_authenticated
+####@require_authenticated
 async def get_activity_feed(
     request: Request,
     limit: int = 20
@@ -502,7 +502,7 @@ async def admin_notify_event_subscribers(event_id: str, message: str):
 
 @router.get("/users/search")
 @api_rate_limit("social_operations")
-@require_authenticated
+###@require_authenticated
 async def search_users(
     q: str,
     request: Request,

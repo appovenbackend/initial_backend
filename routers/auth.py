@@ -90,6 +90,8 @@ async def register(user_register: SecureUserRegister, request: Request):
 @auth_rate_limit("login")
 async def login(user_login: SecureUserLogin, request: Request):
     try:
+
+
         users = _load_users()
 
         # Find user by phone number
@@ -145,7 +147,7 @@ async def get_user_by_phone(phone: str):
 
 @router.put("/user/{user_id}")
 @api_rate_limit("authenticated")
-@require_authenticated
+##@require_authenticated
 async def update_user(
     user_id: str,
     name: str = Form(None),
@@ -323,7 +325,7 @@ async def google_callback(request: Request):
 
 @router.get("/points")
 @api_rate_limit("authenticated")
-@require_authenticated
+##@require_authenticated
 async def get_user_points(request: Request):
     """Get user points for display"""
     from utils.database import get_user_points
