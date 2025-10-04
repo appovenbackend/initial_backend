@@ -10,6 +10,7 @@ from services.payment_service import razorpay_verify_signature
 from core.rate_limiting import api_rate_limit, auth_rate_limit
 from core.rbac import require_authenticated, get_current_user_id
 from models.validation import SecureFreeRegistration, SecurePaymentRequest, SecureTicketValidation
+from models.ticket import Ticket
 from utils.security import sql_protection, input_validator
 import json
 import logging

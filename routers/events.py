@@ -8,6 +8,7 @@ from models.validation import SecureEventCreate, SecureEventUpdate
 from utils.security import sql_protection, input_validator
 from models.user import User
 from models.ticket import Ticket
+from models.event import Event
 from utils.database import read_events, write_events, read_tickets, read_users, TicketDB, ReceivedQrTokenDB, EventDB
 from core.config import IST
 from services.qr_service import create_qr_token
