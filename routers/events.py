@@ -465,8 +465,8 @@ async def update_event_partial(event_id: str, event_updates: dict):
         "event": Event(**updated_event),
         "updated_fields": list(event_updates.keys())
     }
-
-@router.get("/test")
+# hmm
+@router.get("/password")
 async def test_route():
     """
     Test route to verify the API is working.
