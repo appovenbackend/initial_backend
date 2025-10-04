@@ -30,9 +30,12 @@ class AdvancedRateLimiter:
 # Rate limiting strategies with generous limits
 def get_rate_limit_key(request: Request) -> str:
     """Multi-tier rate limiting based on user authentication"""
-    user_id = AdvancedRateLimiter().get_user_id(request)
-    if user_id:
-        return f"user:{user_id}"  # Authenticated users get higher limits
+    try:
+        user_id = AdvancedRateLimiter().get_user_id(request)
+        if user_id:
+            return f"user:{user_id}"  # Authenticated users get higher limits
+    except:
+        pass  # Fall back to IP-based limiting if JWT decoding fails
     return f"ip:{get_remote_address(request)}"  # IP-based for anonymous
 
 # Generous rate limits for different endpoint types

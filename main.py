@@ -7,8 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from middleware.security import SecurityHeadersMiddleware, RequestSizeLimitMiddleware, SecurityLoggingMiddleware
@@ -33,8 +32,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Rate limiting
-limiter = Limiter(key_func=get_remote_address)
+# Rate limiting is handled by core.rate_limiting module
 
 def initialize_sample_data():
     """Initialize database on app startup - no sample data added to ensure persistence of existing data on deployment"""
@@ -206,7 +204,6 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 @app.get("/health")
-@limiter.limit("100/minute")
 async def health_check(request: Request):
     """Enhanced health check endpoint with comprehensive monitoring"""
     try:
