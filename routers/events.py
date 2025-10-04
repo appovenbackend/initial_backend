@@ -533,6 +533,39 @@ async def delete_event(request: Request, event_id: str):
     finally:
         db.close()
 
+@router.put("/{event_id}/activate")
+
+async def activate_event(request: Request, event_id: str):
+    """
+    Activate a specific event by setting isActive to true.
+    """
+    try:
+        events = _load_events()
+        event = next((e for e in events if e["id"] == event_id), None)
+
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+
+        # Set event as active
+        event["isActive"] = True
+
+        # Save the updated events list
+        _save_events(events)
+        _cache_invalidate_events_list()
+
+        return {
+            "message": "Event activated successfully",
+            "event_id": event_id,
+            "event_title": event.get("title"),
+            "is_active": True
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error activating event: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to activate event: {str(e)}")
+
 @router.put("/{event_id}/toggle-activation")
 
 async def toggle_event_activation(request: Request, event_id: str):

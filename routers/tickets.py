@@ -139,9 +139,11 @@ async def register_free(payload: dict):
                 raise HTTPException(status_code=400, detail="Event is not active")
     except HTTPException:
         raise
+
     # capacity check
     if ev.get("capacity", 0) > 0 and ev.get("reserved", 0) >= ev.get("capacity", 0):
         raise HTTPException(status_code=400, detail="Event full")
+
     # Guard against duplicate free registration at ticket level as well (legacy users)
     existing_tickets = _load_tickets()
     if any(t for t in existing_tickets if t.get("userId") == userId and t.get("eventId") == eventId):
