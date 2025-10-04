@@ -60,7 +60,14 @@ run_migration()
 # Initialize database on startup
 initialize_sample_data()
 
-app = FastAPI(title="Fitness Event Booking API (IST)")
+app = FastAPI(
+    title="Fitness Event Booking API (IST)",
+    description="Comprehensive API for fitness event booking, user management, and social features",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
+)
 
 # Rate limiting setup with enhanced security
 app.state.limiter = limiter
