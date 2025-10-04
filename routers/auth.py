@@ -67,7 +67,7 @@ async def register(user_register: SecureUserRegister, request: Request):
         _save_users(users)
 
         # Create access token using enhanced JWT security
-        access_token = jwt_security_manager.create_token(new_user["id"], {"role": "user"})
+        access_token = jwt_security_manager.create_token(new_user["id"], {"role": new_user.get("role", "user")})
 
         return {
             "msg": "User registered successfully",
@@ -322,11 +322,14 @@ async def google_callback(request: Request):
         raise HTTPException(status_code=500, detail=f"Google login failed: {str(e)}")
 
 @router.get("/points")
-async def get_user_points(request: Request, x_user_id: str = Header(..., alias="X-User-ID", description="Current user ID for authentication")):
+@api_rate_limit("authenticated")
+@require_authenticated
+async def get_user_points(request: Request):
     """Get user points for display"""
     from utils.database import get_user_points
 
-    points_data = get_user_points(x_user_id)
+    current_user_id = get_current_user_id(request)
+    points_data = get_user_points(current_user_id)
 
     # Return user-friendly format
     return {

@@ -19,14 +19,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         
-        # Content Security Policy (relaxed for development)
+        # Content Security Policy (relaxed for development with Swagger UI support)
         csp = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://accounts.google.com https://checkout.razorpay.com; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: https:; "
-            "connect-src 'self' https://api.razorpay.com https://accounts.google.com; "
-            "frame-src https://accounts.google.com https://checkout.razorpay.com;"
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://checkout.razorpay.com https://cdn.jsdelivr.net https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "img-src 'self' data: https: https://cdn.jsdelivr.net; "
+            "connect-src 'self' https://api.razorpay.com https://accounts.google.com https://cdn.jsdelivr.net; "
+            "frame-src 'self' https://accounts.google.com https://checkout.razorpay.com;"
         )
         response.headers["Content-Security-Policy"] = csp
         
