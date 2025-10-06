@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
+from fastapi.responses import JSONResponse
 from uuid import uuid4
 from datetime import datetime, timedelta
 from dateutil import parser
@@ -194,7 +195,16 @@ async def get_all_events(request: Request):
 
     except Exception as e:
         print(f"Error in get_all_events: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve all events: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "RETRIEVE_EVENTS_FAILED",
+                "message": "Failed to retrieve all events.",
+                "code": "EVENTS_001",
+                "timestamp": datetime.now(IST).isoformat(),
+                "details": str(e) if os.getenv("DEBUG", "false").lower() == "true" else None
+            }
+        )
 
 @router.get("/recent", response_model=List[Event])
 @api_rate_limit("public_read")
@@ -284,7 +294,15 @@ async def get_registered_users_for_event(request: Request, event_id: str):
 @api_rate_limit("admin")
 async def update_event_price(event_id: str, new_price: int, request: Request):
     if new_price < 0:
-        raise HTTPException(status_code=400, detail="Price cannot be negative")
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "INVALID_PRICE",
+                "message": "Price cannot be negative.",
+                "code": "EVENTS_002",
+                "timestamp": datetime.now(IST).isoformat()
+            }
+        )
 
     events = _load_events()
     e = next((x for x in events if x["id"] == event_id), None)

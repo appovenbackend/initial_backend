@@ -230,12 +230,28 @@ async def update_user(
     # Security check - users can only update their own profile
     current_user_id = get_current_user_id(request)
     if current_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Can only update your own profile")
+        return JSONResponse(
+            status_code=403,
+            content={
+                "error": "FORBIDDEN_UPDATE",
+                "message": "Can only update your own profile.",
+                "code": "AUTH_008",
+                "timestamp": datetime.now(IST).isoformat()
+            }
+        )
     
     users = _load_users()
     user = next((u for u in users if u["id"] == user_id), None)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "USER_NOT_FOUND",
+                "message": "User not found.",
+                "code": "AUTH_009",
+                "timestamp": datetime.now(IST).isoformat()
+            }
+        )
 
     # Sanitize input data
     update_data = {
@@ -259,11 +275,27 @@ async def update_user(
         new_phone = sanitized_data["phone"].strip()
         # Validate phone format
         if not input_validator.validate_phone_number(new_phone):
-            raise HTTPException(status_code=400, detail="Invalid phone number format")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "INVALID_PHONE_FORMAT",
+                    "message": "Invalid phone number format.",
+                    "code": "AUTH_010",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
         # Check if phone number already exists for another user
         existing_phone_user = next((u for u in users if u["phone"] == new_phone and u["id"] != user_id), None)
         if existing_phone_user:
-            raise HTTPException(status_code=400, detail="Phone number already exists for another user")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "PHONE_ALREADY_IN_USE",
+                    "message": "Phone number already exists for another user.",
+                    "code": "AUTH_011",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
         user["phone"] = new_phone
         updated = True
 
@@ -271,7 +303,15 @@ async def update_user(
         email = sanitized_data["email"].strip()
         # Validate email format
         if not input_validator.validate_email(email):
-            raise HTTPException(status_code=400, detail="Invalid email format")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "INVALID_EMAIL_FORMAT",
+                    "message": "Invalid email format.",
+                    "code": "AUTH_012",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
         user["email"] = email
         updated = True
 
@@ -282,7 +322,15 @@ async def update_user(
     if sanitized_data["strava_link"] is not None:
         strava_link = sanitized_data["strava_link"].strip() if sanitized_data["strava_link"].strip() else None
         if strava_link and not input_validator.validate_url(strava_link):
-            raise HTTPException(status_code=400, detail="Invalid Strava link format")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "INVALID_STRAVA_LINK_FORMAT",
+                    "message": "Invalid Strava link format.",
+                    "code": "AUTH_013",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
         user["strava_link"] = strava_link
         updated = True
 
@@ -310,7 +358,15 @@ async def update_user(
         updated = True
 
     if not updated:
-        raise HTTPException(status_code=400, detail="No fields provided for update")
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "NO_FIELDS_TO_UPDATE",
+                "message": "No fields provided for update.",
+                "code": "AUTH_014",
+                "timestamp": datetime.now(IST).isoformat()
+            }
+        )
 
     # Save updated users
     _save_users(users)
@@ -334,7 +390,15 @@ async def google_callback(request: Request):
         user_info = token.get("userinfo")
 
         if not user_info:
-            raise HTTPException(status_code=400, detail="Google login failed")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "GOOGLE_LOGIN_FAILED",
+                    "message": "Google login failed.",
+                    "code": "AUTH_015",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
 
         users = _load_users()
         # Check if user exists by email
@@ -391,7 +455,16 @@ async def google_callback(request: Request):
             "token_type": "bearer"
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Google login failed: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "GOOGLE_LOGIN_ERROR",
+                "message": "Google login failed.",
+                "code": "AUTH_016",
+                "timestamp": datetime.now(IST).isoformat(),
+                "details": str(e) if os.getenv("DEBUG", "false").lower() == "true" else None
+            }
+        )
 
 @router.get("/points")
 @api_rate_limit("authenticated")
