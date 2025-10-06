@@ -18,6 +18,7 @@ class SecureEventCreate(BaseModel):
     endAt: str = Field(..., pattern=r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}')
     priceINR: int = Field(..., ge=0, le=100000)  # 0 to 1 lakh
     bannerUrl: Optional[str] = Field(None, pattern=r'^https?://.+\.(jpg|jpeg|png|gif|webp)$')
+    isActive: Optional[bool] = True
     organizerName: Optional[str] = Field("bhag", max_length=50)
     organizerLogo: Optional[str] = Field("https://example.com/default-logo.png", pattern=r'^https?://.+\.(jpg|jpeg|png|gif|webp)$')
     coordinate_lat: Optional[str] = Field(None, pattern=r'^-?\d+\.?\d*$')
