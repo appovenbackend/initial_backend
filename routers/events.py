@@ -86,7 +86,7 @@ def _cache_invalidate_events_list():
     delete_cache(_EVENTS_CACHE_KEY)
 
 @router.post("/", response_model=Event)
-@api_rate_limit("event_creation")
+#@api_rate_limit("event_creation")
 async def create_event(ev: SecureEventCreate, request: Request):
     new_ev = Event(
         id="evt_" + uuid4().hex[:10],
@@ -165,7 +165,7 @@ async def list_events(request: Request):
     return results
 
 @router.get("/all", response_model=List[Event])
-@api_rate_limit("admin")
+#@api_rate_limit("admin")
 async def get_all_events(request: Request):
     """
     Get ALL events including deactivated and expired events.
@@ -241,7 +241,7 @@ async def get_event(event_id: str, request: Request):
     return Event(**e)
 
 @router.get("/{event_id}/registered_users")
-@api_rate_limit("admin")
+#@api_rate_limit("admin")
 async def get_registered_users_for_event(request: Request, event_id: str):
     # Check if event exists
     events = _load_events()
@@ -276,7 +276,7 @@ async def get_registered_users_for_event(request: Request, event_id: str):
     }
 
 @router.put("/{event_id}/update_price")
-@api_rate_limit("admin")
+#@api_rate_limit("admin")
 async def update_event_price(event_id: str, new_price: int, request: Request):
     if new_price < 0:
         raise HTTPException(status_code=400, detail="Price cannot be negative")
@@ -292,7 +292,7 @@ async def update_event_price(event_id: str, new_price: int, request: Request):
     return {"message": "Event price updated successfully", "new_price": new_price}
 
 @router.patch("/{event_id}")
-@api_rate_limit("admin")
+#@api_rate_limit("admin")
 async def update_event_partial(event_id: str, event_updates: SecureEventUpdate, request: Request):
     """
     Update an existing event with partial data.
@@ -359,7 +359,7 @@ async def update_event_partial(event_id: str, event_updates: SecureEventUpdate, 
 
 
 @router.delete("/{event_id}/delete")
-@api_rate_limit("admin")
+#@api_rate_limit("admin")
 async def delete_event(request: Request, event_id: str):
     """
     Delete an event completely from the database.

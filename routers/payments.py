@@ -369,7 +369,7 @@ async def get_order_status(order_id: str, request: Request):
     }
 
 @router.get("/test")
-@api_rate_limit("admin")
+#@api_rate_limit("admin")
 async def test_payment_integration(request: Request):
     """Test endpoint to verify Razorpay configuration"""
     return {

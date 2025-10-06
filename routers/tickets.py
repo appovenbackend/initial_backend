@@ -264,8 +264,8 @@ async def payments_verify(payload: SecurePaymentRequest, request: Request):
     return new_ticket
 
 @router.get("/tickets/{user_id}")
-@api_rate_limit("authenticated")
-@require_authenticated
+#@api_rate_limit("authenticated")
+#@require_authenticated
 async def get_tickets_for_user(user_id: str, request: Request):
     # Security check - users can only view their own tickets
     current_user_id = get_current_user_id(request)
@@ -296,8 +296,8 @@ async def get_tickets_for_user(user_id: str, request: Request):
     return enhanced_tickets
 
 @router.get("/tickets/ticket/{ticket_id}")
-@api_rate_limit("authenticated")
-@require_authenticated
+#@api_rate_limit("authenticated")
+#@require_authenticated
 async def get_ticket(ticket_id: str, request: Request):
     # Security check - users can only view their own tickets
     current_user_id = get_current_user_id(request)
@@ -354,7 +354,7 @@ async def receive_qr_token(token: str, eventId: str, request: Request):
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @router.get("/getAllQrTokens")
-@api_rate_limit("admin")
+#@api_rate_limit("admin")
 async def get_all_qr_tokens(request: Request):
     """
     Retrieves all saved QR tokens from the database.
@@ -363,7 +363,7 @@ async def get_all_qr_tokens(request: Request):
     return {"qr_tokens": received_tokens, "count": len(received_tokens)}
 
 @router.get("/getQrTokensByEvent/{event_id}")
-@api_rate_limit("admin")
+#@api_rate_limit("admin")
 async def get_qr_tokens_by_event(event_id: str, request: Request):
     """
     Retrieves QR tokens for a specific event.
