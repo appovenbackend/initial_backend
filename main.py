@@ -40,6 +40,13 @@ def initialize_sample_data():
     # No sample data is added to ensure persistence of existing data on deployment
     pass
 
+
+if os.getenv("RUN_MIGRATION") == "true":
+    print("🔄 Running database migration...")
+    from migrate_db import run_migrations
+    run_migrations()
+    print("✅ Migration completed!")
+
 # TEMPORARY: Run migration on startup (remove after migration completes)
 def run_migration():
     """Run database migration to add missing columns"""

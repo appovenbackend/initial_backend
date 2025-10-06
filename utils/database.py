@@ -291,6 +291,12 @@ def read_events():
             event_dict = event.__dict__.copy()
             # Remove SQLAlchemy internal fields
             event_dict.pop('_sa_instance_state', None)
+
+            # Handle missing requires_approval column for backward compatibility
+            # Default to False for existing events
+            if 'requires_approval' not in event_dict:
+                event_dict['requires_approval'] = False
+
             result.append(event_dict)
         return result
     finally:
@@ -329,9 +335,9 @@ def write_events(data):
                         'organizerLogo': event_data.get('organizerLogo', 'https://example.com/default-logo.png'),
                         'coordinate_lat': event_data.get('coordinate_lat'),
                         'coordinate_long': event_data.get('coordinate_long'),
-                        'address_url': event_data.get('address_url'),
-                        'registration_link': event_data.get('registration_link'),
-                        'requires_approval': event_data.get('requires_approval', False)
+                    'address_url': event_data.get('address_url'),
+                    'registration_link': event_data.get('registration_link')
+                    # Note: requires_approval column added via migration, will default via DB
                     }
                     # Remove None values for required fields
                     filtered_data = {k: v for k, v in filtered_data.items() if v is not None}
