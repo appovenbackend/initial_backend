@@ -81,6 +81,7 @@ class UserDB(Base):
     bio = Column(String, nullable=True)
     strava_link = Column(String, nullable=True)
     instagram_id = Column(String, nullable=True)
+    subscribedEvents = Column(Text, nullable=True)  # JSON list of event IDs
     is_private = Column(Boolean, default=False)
     password = Column(String, nullable=True)
     createdAt = Column(String, nullable=False)

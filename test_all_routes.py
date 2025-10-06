@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 # Configuration for local vs deployed testing
 DEPLOYED_URL = "https://initialbackend-production.up.railway.app"
-USE_DEPLOYED = True  # Set to False to use local TestClient
+USE_DEPLOYED = False  # Set to False to use local TestClient
 
 if USE_DEPLOYED:
     # Use requests for deployed testing
