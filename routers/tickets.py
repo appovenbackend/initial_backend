@@ -286,8 +286,8 @@ async def payments_verify(payload: SecurePaymentRequest, request: Request):
     return new_ticket
 
 @router.get("/tickets/{user_id}")
-###@api_rate_limit("authenticated")
-#@require_authenticated
+#@api_rate_limit("authenticated")
+@require_authenticated
 async def get_tickets_for_user(user_id: str, request: Request):
     # Security check - users can only view their own tickets
     current_user_id = get_current_user_id(request)
@@ -318,8 +318,8 @@ async def get_tickets_for_user(user_id: str, request: Request):
     return enhanced_tickets
 
 @router.get("/tickets/ticket/{ticket_id}")
-###@api_rate_limit("authenticated")
-#@require_authenticated
+#@api_rate_limit("authenticated")
+@require_authenticated
 async def get_ticket(ticket_id: str, request: Request):
     # Security check - users can only view their own tickets
     current_user_id = get_current_user_id(request)
