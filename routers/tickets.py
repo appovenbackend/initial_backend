@@ -264,12 +264,12 @@ async def payments_verify(payload: SecurePaymentRequest, request: Request):
 
 @router.get("/tickets/{user_id}")
 @api_rate_limit("authenticated")
-##@require_authenticated
+@require_authenticated
 async def get_tickets_for_user(user_id: str, request: Request):
     # Security check - users can only view their own tickets
-    ##current_user_id = get_current_user_id(request)
-    ##if current_user_id != user_id:
-    ##    raise HTTPException(status_code=403, detail="Can only view your own tickets")
+    current_user_id = get_current_user_id(request)
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Can only view your own tickets")
     
     tickets = _load_tickets()
     events = _load_events()
@@ -296,18 +296,18 @@ async def get_tickets_for_user(user_id: str, request: Request):
 
 @router.get("/tickets/ticket/{ticket_id}")
 @api_rate_limit("authenticated")
-##@require_authenticated
+@require_authenticated
 async def get_ticket(ticket_id: str, request: Request):
     # Security check - users can only view their own tickets
-    ##current_user_id = get_current_user_id(request)
+    current_user_id = get_current_user_id(request)
 
     tickets = _load_tickets()
     t = next((x for x in tickets if x["id"] == ticket_id), None)
     if not t:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
-    ##if t["userId"] != current_user_id:
-    ##    raise HTTPException(status_code=403, detail="Can only view your own tickets")
+    if t["userId"] != current_user_id:
+        raise HTTPException(status_code=403, detail="Can only view your own tickets")
 
     # Fetch event details
     events = _load_events()

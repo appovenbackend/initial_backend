@@ -147,7 +147,7 @@ async def get_user_by_phone(phone: str):
 
 @router.put("/user/{user_id}")
 @api_rate_limit("authenticated")
-##@require_authenticated
+@require_authenticated
 async def update_user(
     user_id: str,
     name: str = Form(None),
@@ -325,13 +325,13 @@ async def google_callback(request: Request):
 
 @router.get("/points")
 @api_rate_limit("authenticated")
-##@require_authenticated
+@require_authenticated
 async def get_user_points(request: Request):
     """Get user points for display"""
     from utils.database import get_user_points
 
-    ##current_user_id = get_current_user_id(request)
-    ##points_data = get_user_points(current_user_id)
+    current_user_id = get_current_user_id(request)
+    points_data = get_user_points(current_user_id)
 
     # Return user-friendly format
     return {

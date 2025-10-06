@@ -139,13 +139,13 @@ def _build_profile_response(user: dict, viewer_id: str = None, connections: list
 
 @router.get("/users/{user_id}", response_model=UserProfileResponse)
 @api_rate_limit("social_operations")
-###@require_authenticated
+@require_authenticated
 async def get_user_profile(
     user_id: str,
     request: Request
 ):
     """Get user profile with privacy controls"""
-    ##current_user_id = get_current_user_id(request)
+    current_user_id = get_current_user_id(request)
 
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)
@@ -157,13 +157,13 @@ async def get_user_profile(
 
 @router.get("/users/{user_id}/privacy")
 @api_rate_limit("social_operations")
-###@require_authenticated
+@require_authenticated
 async def get_privacy_setting(
     user_id: str,
     request: Request
 ):
     """Get the current privacy setting for a user"""
-    ##current_user_id = get_current_user_id(request)
+    current_user_id = get_current_user_id(request)
 
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)
@@ -198,13 +198,13 @@ async def update_privacy_setting(
 
 @router.post("/users/{user_id}/connect", response_model=ConnectionResponse)
 @api_rate_limit("social_operations")
-###@require_authenticated
+@require_authenticated
 async def request_connection(
     user_id: str,
     request: Request
 ):
     """Request a connection; if target is public, auto-accept."""
-    ##current_user_id = get_current_user_id(request)
+    current_user_id = get_current_user_id(request)
 
     if current_user_id == user_id:
         raise HTTPException(status_code=400, detail="Cannot connect to yourself")
@@ -253,13 +253,13 @@ async def request_connection(
 
 @router.delete("/users/{user_id}/disconnect")
 @api_rate_limit("social_operations")
-###@require_authenticated
+@require_authenticated
 async def disconnect_user(
     user_id: str,
     request: Request
 ):
     """Remove a connection or pending request."""
-    ##current_user_id = get_current_user_id(request)
+    current_user_id = get_current_user_id(request)
 
     follows = _load_user_follows()
 
@@ -279,12 +279,12 @@ async def disconnect_user(
 
 @router.get("/connection-requests", response_model=List[ConnectionRequestItem])
 @api_rate_limit("social_operations")
-###@require_authenticated
+@require_authenticated
 async def get_follow_requests(
     request: Request
 ):
     """Get pending connection requests for current user"""
-    ##current_user_id = get_current_user_id(request)
+    current_user_id = get_current_user_id(request)
 
     follows = _load_user_follows()
     users = _load_users()
@@ -306,13 +306,13 @@ async def get_follow_requests(
 
 @router.post("/connection-requests/{request_id}/accept")
 @api_rate_limit("social_operations")
-###@require_authenticated
+@require_authenticated
 async def accept_follow_request(
     request_id: str,
     request: Request
 ):
     """Accept a connection request"""
-    ##current_user_id = get_current_user_id(request)
+    current_user_id = get_current_user_id(request)
 
     follows = _load_user_follows()
 
@@ -337,13 +337,13 @@ async def accept_follow_request(
 
 @router.post("/connection-requests/{request_id}/decline")
 @api_rate_limit("social_operations")
-###@require_authenticated
+@require_authenticated
 async def decline_follow_request(
     request_id: str,
     request: Request
 ):
     """Decline a connection request"""
-    ##current_user_id = get_current_user_id(request)
+    current_user_id = get_current_user_id(request)
 
     follows = _load_user_follows()
 
@@ -364,13 +364,13 @@ async def decline_follow_request(
 
 @router.get("/users/{user_id}/connections")
 @api_rate_limit("social_operations")
-####@require_authenticated
+@require_authenticated
 async def get_user_connections(
     user_id: str,
     request: Request
 ):
     """Get user's connections (accepted, either direction)."""
-    ##current_user_id = get_current_user_id(request)
+    current_user_id = get_current_user_id(request)
 
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)
@@ -403,12 +403,12 @@ async def get_user_connections(
 
 @router.get("/connections")
 @api_rate_limit("social_operations")
-#####@require_authenticated
+@require_authenticated
 async def get_my_connections(
     request: Request
 ):
     """Get current user's connections (accepted, either direction)."""
-    ##current_user_id = get_current_user_id(request)
+    current_user_id = get_current_user_id(request)
 
     users = _load_users()
     follows = _load_user_follows()
@@ -433,13 +433,13 @@ async def get_my_connections(
 
 @router.get("/feed")
 @api_rate_limit("social_operations")
-####@require_authenticated
+@require_authenticated
 async def get_activity_feed(
     request: Request,
     limit: int = 20
 ):
     """Get activity feed from followed users"""
-    ##current_user_id = get_current_user_id(request)
+    current_user_id = get_current_user_id(request)
 
     follows = _load_user_follows()
     events = read_events()
@@ -502,14 +502,14 @@ async def admin_notify_event_subscribers(event_id: str, message: str):
 
 @router.get("/users/search")
 @api_rate_limit("social_operations")
-###@require_authenticated
+@require_authenticated
 async def search_users(
     q: str,
     request: Request,
     limit: int = 10
 ):
     """Search users by name"""
-    ##current_user_id = get_current_user_id(request)
+    current_user_id = get_current_user_id(request)
 
     if not q or len(q.strip()) < 2:
         raise HTTPException(status_code=400, detail="Search query must be at least 2 characters")
