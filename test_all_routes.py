@@ -5,27 +5,67 @@ Tests all routes across auth, events, tickets, payments, social, and migration r
 """
 
 import pytest
-from fastapi.testclient import TestClient
+import requests
 import sys
 import os
 from unittest.mock import patch
 
-# Add the project root to Python path
-sys.path.insert(0, os.path.abspath('.'))
+# Configuration for local vs deployed testing
+DEPLOYED_URL = "https://initialbackend-production.up.railway.app"
+USE_DEPLOYED = True  # Set to False to use local TestClient
 
-try:
-    from main import app
-    from utils.database import get_database_session, read_users, write_users
-    from core.config import SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
-    from services.cache_service import is_cache_healthy
-    import os
-except ImportError as e:
-    print(f"Import error: {e}")
-    print("Make sure you're running from the initial_backend directory")
-    sys.exit(1)
+if USE_DEPLOYED:
+    # Use requests for deployed testing
+    def get_client():
+        return None  # We'll use requests directly
+    client = requests.Session()
+    BASE_URL = DEPLOYED_URL
+else:
+    # Use local TestClient
+    from fastapi.testclient import TestClient
+    # Add the project root to Python path
+    sys.path.insert(0, os.path.abspath('.'))
 
-# Test client
-client = TestClient(app)
+    try:
+        from main import app
+        from utils.database import get_database_session, read_users, write_users
+        from core.config import SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+        from services.cache_service import is_cache_healthy
+        import os
+    except ImportError as e:
+        print(f"Import error: {e}")
+        print("Make sure you're running from the initial_backend directory")
+        sys.exit(1)
+
+    client = TestClient(app)
+    BASE_URL = "http://testserver"
+
+def make_request(method, path, **kwargs):
+    """Helper function to handle HTTP requests for both local and deployed testing"""
+    if USE_DEPLOYED:
+        url = BASE_URL + path
+        if method.lower() == 'get':
+            return client.get(url, **kwargs)
+        elif method.lower() == 'post':
+            return client.post(url, **kwargs)
+        elif method.lower() == 'put':
+            return client.put(url, **kwargs)
+        elif method.lower() == 'delete':
+            return client.delete(url, **kwargs)
+        else:
+            raise ValueError(f"Unsupported HTTP method: {method}")
+    else:
+        # Local TestClient - use path directly
+        if method.lower() == 'get':
+            return client.get(path, **kwargs)
+        elif method.lower() == 'post':
+            return client.post(path, **kwargs)
+        elif method.lower() == 'put':
+            return client.put(path, **kwargs)
+        elif method.lower() == 'delete':
+            return client.delete(path, **kwargs)
+        else:
+            raise ValueError(f"Unsupported HTTP method: {method}")
 
 # Test data
 test_user = {
@@ -58,14 +98,17 @@ class TestAuthRoutes:
 
     def test_root_endpoint(self):
         """Test root endpoint"""
-        response = client.get("/")
+        if USE_DEPLOYED:
+            response = client.get(BASE_URL + "/")
+        else:
+            response = client.get("/")
         assert response.status_code == 200
         data = response.json()
         assert "msg" in data
 
     def test_test_endpoint(self):
         """Test test endpoint"""
-        response = client.get("/test")
+        response = make_request("get", "/test")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
@@ -74,7 +117,7 @@ class TestAuthRoutes:
 
     def test_openapi_test(self):
         """Test openapi test endpoint"""
-        response = client.get("/openapi-test")
+        response = make_request("get", "/openapi-test")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
@@ -83,7 +126,7 @@ class TestAuthRoutes:
 
     def test_health_check(self):
         """Test health check endpoint"""
-        response = client.get("/health")
+        response = make_request("get", "/health")
         assert response.status_code == 200
         data = response.json()
         assert "status" in data

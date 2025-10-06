@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List, Optional
 from core.rate_limiting import api_rate_limit
 from core.rbac import require_authenticated, get_current_user_id
+from core.jwt_security import jwt_security_manager
 from utils.security import sql_protection, input_validator
 from models.user import User
 from models.user_follow import (

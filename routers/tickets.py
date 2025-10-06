@@ -4,6 +4,7 @@ from datetime import datetime
 from dateutil import parser
 from utils.database import read_users, write_users, read_events, write_events, read_tickets, write_tickets, read_received_qr_tokens, write_received_qr_tokens
 from core.config import IST
+from core.jwt_security import jwt_security_manager
 
 from services.qr_service import create_qr_token
 from services.payment_service import razorpay_verify_signature

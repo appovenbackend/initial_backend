@@ -18,6 +18,7 @@ from core.config import (
     ALGORITHM,
     JWT_KID
 )
+from core.jwt_security import jwt_security_manager
 from services.payment_service import razorpay_create_order, razorpay_verify_signature
 from utils.database import read_users, read_events, read_tickets, write_tickets
 from services.qr_service import create_qr_token

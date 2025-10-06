@@ -127,3 +127,7 @@ def is_authenticated(request: Request) -> bool:
         return True
     except:
         return False
+
+def get_current_user(request: Request) -> str:
+    """Extract user ID from JWT token (alias for get_current_user_id)"""
+    return get_current_user_id(request)
