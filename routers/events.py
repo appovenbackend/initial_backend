@@ -4,7 +4,7 @@ from uuid import uuid4
 from datetime import datetime, timedelta
 from dateutil import parser
 from core.rate_limiting import api_rate_limit, generous_rate_limit
-from core.rbac import require_role, UserRole, get_current_user_id, get_current_user
+from core.rbac import require_role, UserRole, get_current_user_id, get_current_user, require_authenticated
 from models.validation import SecureEventCreate, SecureEventUpdate
 from utils.security import sql_protection, input_validator
 from models.user import User
