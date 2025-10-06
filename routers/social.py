@@ -3,7 +3,7 @@ from uuid import uuid4
 from datetime import datetime
 from typing import List, Optional
 from core.rate_limiting import api_rate_limit
-from core.rbac import require_authenticated, get_current_user_id
+from core.rbac import require_authenticated, get_current_user_id, require_role, UserRole
 from core.jwt_security import jwt_security_manager
 from utils.security import sql_protection, input_validator
 from models.user import User
@@ -131,22 +131,25 @@ def _build_profile_response(user: dict, viewer_id: str = None, connections: list
     return response
 
 @router.get("/users/{user_id}", response_model=UserProfileResponse)
+@api_rate_limit("social_operations")
+@require_authenticated
 async def get_user_profile(
     user_id: str,
     request: Request
 ):
-    """Get user profile - all profiles are now public"""
+    """Get user profile with privacy controls"""
+    current_user_id = get_current_user_id(request)
+
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     follows = _load_user_follows()
-    # No viewer_id passed - all profiles are public now
-    return _build_profile_response(user, None, follows)
+    return _build_profile_response(user, current_user_id, follows)
 
 @router.get("/users/{user_id}/privacy")
-#@api_rate_limit("social_operations")
+@api_rate_limit("social_operations")
 async def get_privacy_setting(
     user_id: str,
     request: Request
@@ -161,11 +164,18 @@ async def get_privacy_setting(
     return {"user_id": user_id, "is_private": is_private}
 
 @router.put("/users/{user_id}/privacy")
+@api_rate_limit("social_operations")
+@require_authenticated
 async def update_privacy_setting(
     user_id: str,
     request: Request,
 ):
     """Toggle the user's account privacy setting"""
+    current_user_id = get_current_user_id(request)
+
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Can only toggle your own privacy settings")
+
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)
     if not user:
@@ -178,15 +188,17 @@ async def update_privacy_setting(
     new_state = user['is_private']
     return {"message": f"Account toggled to {'private' if new_state else 'public'}", "is_private": new_state}
 
-@router.post("/users/{requester_id}/connect/{target_id}", response_model=ConnectionResponse)
+@router.post("/users/{user_id}/connect", response_model=ConnectionResponse)
+@api_rate_limit("social_operations")
+@require_authenticated
 async def request_connection(
-    requester_id: str,
-    target_id: str,
+    user_id: str,
+    request: Request
 ):
     """Request a connection; if target is public, auto-accept."""
-    user_id = target_id
+    current_user_id = get_current_user_id(request)
 
-    if requester_id == user_id:
+    if current_user_id == user_id:
         raise HTTPException(status_code=400, detail="Cannot connect to yourself")
 
     users = _load_users()
@@ -198,7 +210,7 @@ async def request_connection(
 
     # Check if existing connection or request FROM current user TO target user only
     existing = next((c for c in follows if (
-        c['follower_id'] == requester_id and c['following_id'] == user_id
+        c['follower_id'] == current_user_id and c['following_id'] == user_id
     )), None)
 
     if existing:
@@ -216,7 +228,7 @@ async def request_connection(
 
     new_follow = {
         'id': f"conn_{uuid4().hex[:10]}",
-        'follower_id': requester_id,
+        'follower_id': current_user_id,
         'following_id': user_id,
         'status': connection_status,
         'created_at': now,
@@ -232,8 +244,8 @@ async def request_connection(
     return ConnectionResponse(success=True, message=message, status=status)
 
 @router.delete("/users/{user_id}/disconnect")
-#@api_rate_limit("social_operations")
-#@require_authenticated
+@api_rate_limit("social_operations")
+@require_authenticated
 async def disconnect_user(
     user_id: str,
     request: Request
@@ -258,8 +270,8 @@ async def disconnect_user(
     return {"message": "Connection removed"}
 
 @router.get("/connection-requests", response_model=List[ConnectionRequestItem])
-# @api_rate_limit("social_operations")
-# @require_authenticated
+@api_rate_limit("social_operations")
+@require_authenticated
 async def get_follow_requests(
     request: Request
 ):
@@ -285,8 +297,8 @@ async def get_follow_requests(
     return result
 
 @router.post("/connection-requests/{request_id}/accept")
-# @api_rate_limit("social_operations")
-# @require_authenticated
+@api_rate_limit("social_operations")
+@require_authenticated
 async def accept_follow_request(
     request_id: str,
     request: Request
@@ -316,8 +328,8 @@ async def accept_follow_request(
     return {"message": "Connection request accepted"}
 
 @router.post("/connection-requests/{request_id}/decline")
-# @api_rate_limit("social_operations")
-# @require_authenticated
+@api_rate_limit("social_operations")
+@require_authenticated
 async def decline_follow_request(
     request_id: str,
     request: Request
@@ -343,8 +355,8 @@ async def decline_follow_request(
     return {"message": "Connection request declined"}
 
 @router.get("/users/{user_id}/connections")
-# @api_rate_limit("social_operations")
-# @require_authenticated
+@api_rate_limit("social_operations")
+@require_authenticated
 async def get_user_connections(
     user_id: str,
     request: Request
@@ -382,8 +394,8 @@ async def get_user_connections(
     return {"connections": connections, "count": len(connections)}
 
 @router.get("/connections")
-# @api_rate_limit("social_operations")
-# @require_authenticated
+@api_rate_limit("social_operations")
+@require_authenticated
 async def get_my_connections(
     request: Request
 ):
@@ -412,8 +424,8 @@ async def get_my_connections(
     return {"connections": connections, "count": len(connections)}
 
 @router.get("/feed")
-# @api_rate_limit("social_operations")
-# @require_authenticated
+@api_rate_limit("social_operations")
+@require_authenticated
 async def get_activity_feed(
     request: Request,
     limit: int = 20
@@ -457,6 +469,7 @@ async def get_activity_feed(
 
 # Admin messaging endpoints (no-op if WhatsApp not configured)
 @router.post("/admin/notify/all")
+@require_role(UserRole.ADMIN)
 async def admin_notify_all_users(message: str):
     users = _load_users()
     phones = [u.get("phone") for u in users if u.get("phone")]
@@ -467,6 +480,7 @@ async def admin_notify_all_users(message: str):
     return {"sent": sent, "total": len(phones)}
 
 @router.post("/admin/notify/event/{event_id}")
+@require_role(UserRole.ADMIN)
 async def admin_notify_event_subscribers(event_id: str, message: str):
     users = _load_users()
     phones = [
@@ -481,8 +495,8 @@ async def admin_notify_event_subscribers(event_id: str, message: str):
     return {"sent": sent, "total": len(phones)}
 
 @router.get("/users/search")
-# @api_rate_limit("social_operations")
-# @require_authenticated
+@api_rate_limit("social_operations")
+@require_authenticated
 async def search_users(
     q: str,
     request: Request,

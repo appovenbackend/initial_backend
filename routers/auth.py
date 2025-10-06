@@ -121,6 +121,7 @@ async def login(user_login: SecureUserLogin, request: Request):
                 "strava_link": user.get("strava_link"),
                 "instagram_id": user.get("instagram_id"),
                 "picture": user.get("picture"),
+                "role": user.get("role", "user"),
                 "createdAt": user["createdAt"]
             },
             "access_token": access_token,
@@ -146,6 +147,8 @@ async def get_user_by_phone(phone: str):
     return user
 
 @router.put("/user/{user_id}")
+@api_rate_limit("authenticated")
+@require_authenticated
 async def update_user(
     user_id: str,
     name: str = Form(None),
@@ -157,7 +160,10 @@ async def update_user(
     picture: UploadFile = File(None),
     request: Request = None
 ):
-    # Removed authentication - anyone can update any profile
+    # Security check - users can only update their own profile
+    current_user_id = get_current_user_id(request)
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Can only update your own profile")
     
     users = _load_users()
     user = next((u for u in users if u["id"] == user_id), None)
@@ -281,6 +287,7 @@ async def google_callback(request: Request):
                     "bio": existing_user.get("bio"),
                     "strava_link": existing_user.get("strava_link"),
                     "instagram_id": existing_user.get("instagram_id"),
+                    "role": existing_user.get("role", "user"),
                     "createdAt": existing_user["createdAt"]
                 },
                 "access_token": access_token,
@@ -310,6 +317,7 @@ async def google_callback(request: Request):
                 "bio": new_user.get("bio"),
                 "strava_link": new_user.get("strava_link"),
                 "instagram_id": new_user.get("instagram_id"),
+                "role": new_user.get("role", "user"),
                 "createdAt": new_user["createdAt"]
             },
             "access_token": access_token,
@@ -318,12 +326,15 @@ async def google_callback(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Google login failed: {str(e)}")
 
-@router.get("/points/{user_id}")
-async def get_user_points(user_id: str, request: Request):
+@router.get("/points")
+@api_rate_limit("authenticated")
+@require_authenticated
+async def get_user_points(request: Request):
     """Get user points for display"""
     from utils.database import get_user_points
 
-    points_data = get_user_points(user_id)
+    current_user_id = get_current_user_id(request)
+    points_data = get_user_points(current_user_id)
 
     # Return user-friendly format
     return {

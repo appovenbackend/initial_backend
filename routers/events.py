@@ -90,7 +90,7 @@ def _cache_invalidate_events_list():
     delete_cache(_EVENTS_CACHE_KEY)
 
 @router.post("/", response_model=Event)
-###@api_rate_limit("event_creation")
+@api_rate_limit("event_creation")
 async def create_event(ev: SecureEventCreate, request: Request):
     new_ev = Event(
         id="evt_" + uuid4().hex[:10],
@@ -130,7 +130,7 @@ async def create_event(ev: SecureEventCreate, request: Request):
     return new_ev
 
 @router.get("/", response_model=List[Event])
-###@api_rate_limit("public_read")
+@api_rate_limit("public_read")
 async def list_events(request: Request):
     # Cache first (Redis)
     cached = _cache_get_events_list()
@@ -170,7 +170,7 @@ async def list_events(request: Request):
     return results
 
 @router.get("/all", response_model=List[Event])
-###@api_rate_limit("admin")
+@api_rate_limit("admin")
 async def get_all_events(request: Request):
     """
     Get ALL events including deactivated and expired events.
@@ -197,7 +197,7 @@ async def get_all_events(request: Request):
         raise HTTPException(status_code=500, detail=f"Failed to retrieve all events: {str(e)}")
 
 @router.get("/recent", response_model=List[Event])
-###@api_rate_limit("public_read")
+@api_rate_limit("public_read")
 async def list_recent_events(request: Request, limit: int = 10):
     """
     Get the most recent events by creation date.
@@ -226,7 +226,7 @@ async def list_recent_events(request: Request, limit: int = 10):
     return result
 
 @router.get("/{event_id}", response_model=Event)
-###@api_rate_limit("public_read")
+@api_rate_limit("public_read")
 async def get_event(event_id: str, request: Request):
     events = _load_events()
     e = next((x for x in events if x["id"] == event_id), None)
@@ -246,6 +246,7 @@ async def get_event(event_id: str, request: Request):
     return Event(**e)
 
 @router.get("/{event_id}/registered_users")
+@api_rate_limit("admin")
 async def get_registered_users_for_event(request: Request, event_id: str):
     # Check if event exists
     events = _load_events()
@@ -280,23 +281,23 @@ async def get_registered_users_for_event(request: Request, event_id: str):
     }
 
 @router.put("/{event_id}/update_price")
-###@api_rate_limit("admin")
+@api_rate_limit("admin")
 async def update_event_price(event_id: str, new_price: int, request: Request):
     if new_price < 0:
         raise HTTPException(status_code=400, detail="Price cannot be negative")
-    
+
     events = _load_events()
     e = next((x for x in events if x["id"] == event_id), None)
     if not e:
         raise HTTPException(status_code=404, detail="Event not found")
-    
+
     e["priceINR"] = new_price
     _save_events(events)  # Pass all events for update
     _cache_invalidate_events_list()
     return {"message": "Event price updated successfully", "new_price": new_price}
 
 @router.patch("/{event_id}")
-###@api_rate_limit("admin")
+@api_rate_limit("admin")
 async def update_event_partial(event_id: str, event_updates: SecureEventUpdate, request: Request):
     """
     Update an existing event with partial data.
@@ -323,10 +324,10 @@ async def update_event_partial(event_id: str, event_updates: SecureEventUpdate, 
 
     # Convert Pydantic model to dict and update only provided fields
     event_updates_dict = event_updates.dict(exclude_unset=True)
-    
+
     # Sanitize input data
     sanitized_updates = sql_protection.validate_input(event_updates_dict)
-    
+
     # Update fields
     for key, value in sanitized_updates.items():
         if value is not None:
@@ -363,7 +364,7 @@ async def update_event_partial(event_id: str, event_updates: SecureEventUpdate, 
 
 
 @router.delete("/{event_id}/delete")
-###@api_rate_limit("admin")
+@api_rate_limit("admin")
 async def delete_event(request: Request, event_id: str):
     """
     Delete an event completely from the database.
@@ -424,7 +425,6 @@ async def delete_event(request: Request, event_id: str):
         db.close()
 
 @router.put("/{event_id}/activate")
-
 async def activate_event(request: Request, event_id: str):
     """
     Activate a specific event by setting isActive to true.
@@ -457,7 +457,6 @@ async def activate_event(request: Request, event_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to activate event: {str(e)}")
 
 @router.put("/{event_id}/toggle-activation")
-
 async def toggle_event_activation(request: Request, event_id: str):
     """
     Toggle the activation status of an event.
@@ -736,11 +735,13 @@ async def toggle_featured_event(event_id: str):
 
 # Event Join Request Management Endpoints
 @router.post("/{event_id}/request_join")
-async def request_to_join_event(event_id: str, user_id: str, request: Request):
+async def request_to_join_event(event_id: str, request: Request):
     """
     Request to join an event that requires approval.
-    Creates a join request for the specified user.
+    Creates a join request for the authenticated user.
     """
+    # Get current user
+    user_id = get_current_user_id(request)
 
     # Check if event exists and requires approval
     events = _load_events()
@@ -786,6 +787,7 @@ async def request_to_join_event(event_id: str, user_id: str, request: Request):
     }
 
 @router.get("/{event_id}/join_requests")
+@require_role(UserRole.ADMIN)
 async def get_event_join_requests(event_id: str, request: Request):
     """
     Get all join requests for a specific event (admin only).
@@ -819,13 +821,17 @@ async def get_event_join_requests(event_id: str, request: Request):
     }
 
 @router.put("/{event_id}/join_requests/{request_id}")
-async def review_join_request(event_id: str, request_id: str, action: str, admin_id: str):
+@require_role(UserRole.ADMIN)
+async def review_join_request(event_id: str, request_id: str, action: str, admin_request: Request):
     """
-    Approve or reject a join request.
+    Approve or reject a join request (admin only).
     action: 'accept' or 'reject'
     """
     if action not in ["accept", "reject"]:
         raise HTTPException(status_code=400, detail="Action must be 'accept' or 'reject'")
+
+    # Get admin info
+    admin_id = get_current_user_id(admin_request)
 
     # Check if request exists and is for the correct event
     request_details = read_event_join_requests()
@@ -858,7 +864,7 @@ async def review_join_request(event_id: str, request_id: str, action: str, admin
                 existing_ticket = next((t for t in tickets if t["eventId"] == event_id and t["userId"] == join_request["user_id"]), None)
                 if not existing_ticket:
                     # Create ticket for free event
-                    ticket_id = "t_" + uuid().hex[:10]
+                    ticket_id = "t_" + uuid4().hex[:10]
                     issued = datetime.now(IST).isoformat()
                     qr_token = create_qr_token(ticket_id, join_request["user_id"], event_id, event_end_iso_ist=event["endAt"])
 

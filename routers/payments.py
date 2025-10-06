@@ -23,6 +23,7 @@ from services.payment_service import razorpay_create_order, razorpay_verify_sign
 from utils.database import read_users, read_events, read_tickets, write_tickets
 from services.qr_service import create_qr_token
 from core.rate_limiting import api_rate_limit
+from core.rbac import require_authenticated, require_role, UserRole
 from models.validation import SecurePaymentRequest
 from utils.security import sql_protection, input_validator
 from jose import jwt, JWTError
@@ -48,7 +49,7 @@ def _to_ist(dt_iso: str):
     return dt.astimezone(IST)
 
 @router.post("/order")
-##@api_rate_limit("payment")
+@api_rate_limit("payment")
 async def create_payment_order(
     request: Request,
     phone: str = Query(..., description="User phone number"),
@@ -119,7 +120,7 @@ async def create_payment_order(
         raise HTTPException(status_code=500, detail="Failed to create payment order")
 
 @router.post("/verify")
-##@api_rate_limit("payment")
+@api_rate_limit("payment")
 async def verify_payment(request: Request, payload: SecurePaymentRequest):
     """
     Verify Razorpay payment and issue ticket.
@@ -235,7 +236,7 @@ async def verify_payment(request: Request, payload: SecurePaymentRequest):
     }
 
 @router.post("/webhook")
-##@api_rate_limit("payment")
+@api_rate_limit("payment")
 async def razorpay_webhook(request: Request):
     """
     Handle Razorpay webhook events for async payment processing.
@@ -352,7 +353,7 @@ async def razorpay_webhook(request: Request):
         raise HTTPException(status_code=500, detail="Webhook processing failed")
 
 @router.get("/orders/{order_id}")
-#@api_rate_limit("payment")
+@api_rate_limit("payment")
 async def get_order_status(order_id: str, request: Request):
     """Get payment order status"""
     if order_id not in payment_orders:
@@ -369,7 +370,7 @@ async def get_order_status(order_id: str, request: Request):
     }
 
 @router.get("/test")
-##@api_rate_limit("admin")
+@api_rate_limit("admin")
 async def test_payment_integration(request: Request):
     """Test endpoint to verify Razorpay configuration"""
     return {
