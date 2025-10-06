@@ -36,14 +36,6 @@ def _save_user_follows(data):
 def _now_ist():
     return datetime.now(IST).isoformat()
 
-def get_current_user(request: Request) -> str:
-    """Extract user ID from JWT token (simplified for now)"""
-    # In a real app, you'd decode the JWT token from Authorization header
-    # For now, we'll assume user_id is passed in a custom header for testing
-    user_id = request.headers.get("X-User-ID")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-    return user_id
 
 def _get_relationship_status(current_user_id: str, target_user_id: str, connections: list) -> dict:
     """Return connection status between two users in the new connection model."""
@@ -158,14 +150,11 @@ async def get_user_profile(
 
 @router.get("/users/{user_id}/privacy")
 #@api_rate_limit("social_operations")
-#@require_authenticated
 async def get_privacy_setting(
     user_id: str,
     request: Request
 ):
     """Get the current privacy setting for a user"""
-    current_user_id = get_current_user_id(request)
-
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)
     if not user:
@@ -175,12 +164,14 @@ async def get_privacy_setting(
     return {"user_id": user_id, "is_private": is_private}
 
 @router.put("/users/{user_id}/privacy")
+#@api_rate_limit("social_operations")
+#@require_authenticated
 async def update_privacy_setting(
     user_id: str,
     request: Request,
 ):
     """Toggle the user's account privacy setting"""
-    current_user_id = get_current_user(request)
+    current_user_id = get_current_user_id(request)
 
     if current_user_id != user_id:
         raise HTTPException(status_code=403, detail="Can only toggle your own privacy settings")
