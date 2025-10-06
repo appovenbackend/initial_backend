@@ -521,7 +521,7 @@ async def toggle_event_activation(request: Request, event_id: str):
 @router.get("/featured/slots")
 @api_rate_limit("admin")
 @require_role(UserRole.ADMIN)
-async def get_featured_slots_status():
+async def get_featured_slots_status(request: Request):
     """
     Get the current status of featured event slots.
     Returns the event IDs currently assigned to featured_1 and featured_2.
