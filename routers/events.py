@@ -9,7 +9,11 @@ from utils.security import sql_protection, input_validator
 from models.user import User
 from models.ticket import Ticket
 from models.event import Event
-from utils.database import read_events, write_events, read_tickets, read_users, TicketDB, ReceivedQrTokenDB, EventDB
+from utils.database import (
+    read_events, write_events, read_tickets, read_users, read_event_join_requests,
+    create_event_join_request, get_event_join_request, update_event_join_request_status,
+    get_event_join_requests_by_event, TicketDB, ReceivedQrTokenDB, EventDB
+)
 from core.config import IST
 from services.qr_service import create_qr_token
 from typing import List
@@ -105,7 +109,8 @@ async def create_event(ev: SecureEventCreate, request: Request):
         coordinate_lat=ev.coordinate_lat,
         coordinate_long=ev.coordinate_long,
         address_url=ev.address_url,
-        registration_link=ev.registration_link
+        registration_link=ev.registration_link,
+        requires_approval=ev.requires_approval if ev.requires_approval is not None else False
     ).dict()
 
     # Save only the new event (write_events now handles upsert)
@@ -729,3 +734,181 @@ async def toggle_featured_event(event_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to toggle featured event: {str(e)}")
+
+# Event Join Request Management Endpoints
+@router.post("/{event_id}/request_join")
+async def request_to_join_event(event_id: str, request: Request):
+    """
+    Request to join an event that requires approval.
+    Creates a join request for the authenticated user.
+    """
+    # Get current user
+    user_id = get_current_user_id(request)
+
+    # Check if event exists and requires approval
+    events = _load_events()
+    event = next((e for e in events if e["id"] == event_id), None)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if not event.get("requires_approval", False):
+        raise HTTPException(status_code=400, detail="This event does not require approval")
+
+    # Check if event is active and not expired
+    try:
+        end_time = _to_ist(event["endAt"])
+        current_time = datetime.now(IST)
+        if end_time <= current_time or not event.get("isActive", True):
+            raise HTTPException(status_code=400, detail="Event is not available for joining")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Event is not available for joining")
+
+    # Check if user already has a ticket for this event
+    tickets = read_tickets()
+    existing_ticket = next((t for t in tickets if t["eventId"] == event_id and t["userId"] == user_id), None)
+    if existing_ticket:
+        raise HTTPException(status_code=400, detail="You already have a ticket for this event")
+
+    # Check if user already has a pending/accepted request
+    existing_request = get_event_join_request(user_id, event_id)
+    if existing_request:
+        if existing_request["status"] == "pending":
+            raise HTTPException(status_code=400, detail="You already have a pending request for this event")
+        elif existing_request["status"] == "accepted":
+            raise HTTPException(status_code=400, detail="You already have an accepted request for this event")
+
+    # Create the join request
+    requested_at = datetime.now(IST).isoformat()
+    join_request = create_event_join_request(user_id, event_id, requested_at)
+
+    return {
+        "message": "Join request submitted successfully",
+        "request_id": join_request["id"],
+        "status": join_request["status"],
+        "event_title": event["title"]
+    }
+
+@router.get("/{event_id}/join_requests")
+@require_role(UserRole.ADMIN)
+async def get_event_join_requests(event_id: str, request: Request):
+    """
+    Get all join requests for a specific event (admin only).
+    """
+    # Check if event exists
+    events = _load_events()
+    event = next((e for e in events if e["id"] == event_id), None)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    requests = get_event_join_requests_by_event(event_id)
+
+    # Enrich with user details
+    users = read_users()
+    user_dict = {u["id"]: u for u in users}
+
+    enriched_requests = []
+    for req in requests:
+        enriched = req.copy()
+        user = user_dict.get(req["user_id"])
+        if user:
+            enriched["user_name"] = user.get("name")
+            enriched["user_phone"] = user.get("phone")
+            enriched["user_email"] = user.get("email")
+        enriched_requests.append(enriched)
+
+    return {
+        "event": {"id": event["id"], "title": event["title"]},
+        "requests": enriched_requests,
+        "count": len(enriched_requests)
+    }
+
+@router.put("/{event_id}/join_requests/{request_id}")
+@require_role(UserRole.ADMIN)
+async def review_join_request(event_id: str, request_id: str, action: str, admin_request: Request):
+    """
+    Approve or reject a join request (admin only).
+    action: 'accept' or 'reject'
+    """
+    if action not in ["accept", "reject"]:
+        raise HTTPException(status_code=400, detail="Action must be 'accept' or 'reject'")
+
+    # Get admin info
+    admin_id = get_current_user_id(admin_request)
+
+    # Check if request exists and is for the correct event
+    request_details = read_event_join_requests()
+    join_request = next((r for r in request_details if r["id"] == request_id and r["event_id"] == event_id), None)
+    if not join_request:
+        raise HTTPException(status_code=404, detail="Join request not found")
+
+    if join_request["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Request has already been reviewed")
+
+    # Update request status
+    reviewed_at = datetime.now(IST).isoformat()
+    status = "accepted" if action == "accept" else "rejected"
+    updated_request = update_event_join_request_status(request_id, status, admin_id, reviewed_at)
+
+    if not updated_request:
+        raise HTTPException(status_code=500, detail="Failed to update request status")
+
+    message = f"Join request {action}ed successfully"
+
+    # If accepted, create a ticket if it's a free event, or allow payment for paid events
+    if action == "accept":
+        events = _load_events()
+        event = next((e for e in events if e["id"] == event_id), None)
+
+        if event:
+            if event.get("priceINR", 0) == 0:  # Free event
+                # Check if user already has a ticket (shouldn't happen, but safety check)
+                tickets = read_tickets()
+                existing_ticket = next((t for t in tickets if t["eventId"] == event_id and t["userId"] == join_request["user_id"]), None)
+                if not existing_ticket:
+                    # Create ticket for free event
+                    ticket_id = "t_" + uuid().hex[:10]
+                    issued = datetime.now(IST).isoformat()
+                    qr_token = create_qr_token(ticket_id, join_request["user_id"], event_id, event_end_iso_ist=event["endAt"])
+
+                    new_ticket = {
+                        "id": ticket_id,
+                        "eventId": event_id,
+                        "userId": join_request["user_id"],
+                        "qrToken": qr_token,
+                        "issuedAt": issued,
+                        "isValidated": False,
+                        "validatedAt": None,
+                        "validationHistory": [],
+                        "meta": {"kind": "free", "approved": True, "request_id": request_id}
+                    }
+
+                    tickets.append(new_ticket)
+                    write_tickets(tickets)
+
+                    # Add event to user's subscribed events
+                    users = read_users()
+                    user = next((u for u in users if u["id"] == join_request["user_id"]), None)
+                    if user:
+                        if "subscribedEvents" not in user:
+                            user["subscribedEvents"] = []
+                        if event_id not in user["subscribedEvents"]:
+                            user["subscribedEvents"].append(event_id)
+                            write_users(users)
+
+                    # Award points for free event registration
+                    from utils.database import award_points_to_user
+                    if award_points_to_user(join_request["user_id"], 0, f"Free event approved for: {event['title']}"):
+                        print(f"✅ Awarded 0 points for free event: {join_request['user_id']}")
+
+                    message += " and ticket issued for free event"
+
+            else:  # Paid event
+                message += f" for paid event (user can now proceed with payment)"
+
+    return {
+        "message": message,
+        "request_id": request_id,
+        "status": status,
+        "reviewed_by": admin_id,
+        "reviewed_at": reviewed_at
+    }

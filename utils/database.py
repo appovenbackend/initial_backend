@@ -1,7 +1,7 @@
 import os
 import json
 import time
-from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import OperationalError, DisconnectionError
@@ -106,6 +106,7 @@ class EventDB(Base):
     coordinate_long = Column(String, nullable=True)
     address_url = Column(String, nullable=True)
     registration_link = Column(String, nullable=True)
+    requires_approval = Column(Boolean, default=False, index=True)
 
 class TicketDB(Base):
     __tablename__ = "tickets"
@@ -128,6 +129,17 @@ class ReceivedQrTokenDB(Base):
     eventId = Column(String, nullable=False, index=True)
     receivedAt = Column(String, nullable=False)
     source = Column(String, nullable=True)
+
+class EventJoinRequestDB(Base):
+    __tablename__ = "event_join_requests"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, nullable=False, index=True)
+    event_id = Column(String, nullable=False, index=True)
+    status = Column(String, nullable=False, default="pending")  # 'pending', 'accepted', 'rejected'
+    requested_at = Column(String, nullable=False)
+    reviewed_at = Column(String, nullable=True)
+    reviewed_by = Column(String, nullable=True)
 
 class UserFollowDB(Base):
     __tablename__ = "user_connections"  # renamed from user_follows
@@ -318,7 +330,8 @@ def write_events(data):
                         'coordinate_lat': event_data.get('coordinate_lat'),
                         'coordinate_long': event_data.get('coordinate_long'),
                         'address_url': event_data.get('address_url'),
-                        'registration_link': event_data.get('registration_link')
+                        'registration_link': event_data.get('registration_link'),
+                        'requires_approval': event_data.get('requires_approval', False)
                     }
                     # Remove None values for required fields
                     filtered_data = {k: v for k, v in filtered_data.items() if v is not None}
@@ -614,6 +627,153 @@ def award_points_to_user(user_id: str, points: int, reason: str):
     except Exception as e:
         print(f"Error awarding points: {e}")
         return False
+    finally:
+        SessionLocal.remove()
+
+def read_event_join_requests():
+    """Read all event join requests"""
+    db = SessionLocal()
+    try:
+        requests = db.query(EventJoinRequestDB).all()
+        result = []
+        for req in requests:
+            req_dict = req.__dict__.copy()
+            req_dict.pop('_sa_instance_state', None)
+            result.append(req_dict)
+        return result
+    finally:
+        SessionLocal.remove()
+
+def write_event_join_requests(data):
+    """Write event join requests (upsert)"""
+    db = SessionLocal()
+    try:
+        with db.begin():
+            for request_data in data:
+                # Filter only the fields that exist in EventJoinRequestDB model
+                filtered_data = {
+                    'id': request_data.get('id'),
+                    'user_id': request_data.get('user_id'),
+                    'event_id': request_data.get('event_id'),
+                    'status': request_data.get('status', 'pending'),
+                    'requested_at': request_data.get('requested_at'),
+                    'reviewed_at': request_data.get('reviewed_at'),
+                    'reviewed_by': request_data.get('reviewed_by')
+                }
+                # Remove None values for required fields
+                filtered_data = {k: v for k, v in filtered_data.items() if k in ['id', 'user_id', 'event_id', 'status', 'requested_at'] or v is not None}
+
+                request_id = filtered_data.get('id')
+
+                # Check if request exists
+                existing_request = db.query(EventJoinRequestDB).filter(EventJoinRequestDB.id == request_id).first()
+
+                if existing_request:
+                    # Update existing
+                    for key, value in filtered_data.items():
+                        setattr(existing_request, key, value)
+                else:
+                    # Add new
+                    request = EventJoinRequestDB(**filtered_data)
+                    db.add(request)
+    finally:
+        SessionLocal.remove()
+
+def get_event_join_request(user_id: str, event_id: str):
+    """Get a specific join request"""
+    db = SessionLocal()
+    try:
+        request = db.query(EventJoinRequestDB).filter(
+            EventJoinRequestDB.user_id == user_id,
+            EventJoinRequestDB.event_id == event_id
+        ).first()
+        if request:
+            req_dict = request.__dict__.copy()
+            req_dict.pop('_sa_instance_state', None)
+            return req_dict
+        return None
+    finally:
+        SessionLocal.remove()
+
+def create_event_join_request(user_id: str, event_id: str, requested_at: str):
+    """Create a new join request"""
+    from uuid import uuid4
+    db = SessionLocal()
+    try:
+        with db.begin():
+            # Check if request already exists
+            existing = db.query(EventJoinRequestDB).filter(
+                EventJoinRequestDB.user_id == user_id,
+                EventJoinRequestDB.event_id == event_id
+            ).first()
+
+            if existing:
+                # Update status to pending if it was rejected
+                if existing.status == 'rejected':
+                    existing.status = 'pending'
+                    existing.requested_at = requested_at
+                    existing.reviewed_at = None
+                    existing.reviewed_by = None
+                return existing.__dict__.copy()
+            else:
+                # Create new request
+                request_id = f"jr_{uuid4().hex[:10]}"
+                new_request = EventJoinRequestDB(
+                    id=request_id,
+                    user_id=user_id,
+                    event_id=event_id,
+                    status='pending',
+                    requested_at=requested_at
+                )
+                db.add(new_request)
+                req_dict = new_request.__dict__.copy()
+                req_dict.pop('_sa_instance_state', None)
+                return req_dict
+    finally:
+        SessionLocal.remove()
+
+def update_event_join_request_status(request_id: str, status: str, reviewed_by: str, reviewed_at: str):
+    """Update join request status"""
+    db = SessionLocal()
+    try:
+        with db.begin():
+            request = db.query(EventJoinRequestDB).filter(EventJoinRequestDB.id == request_id).first()
+            if request:
+                request.status = status
+                request.reviewed_by = reviewed_by
+                request.reviewed_at = reviewed_at
+                req_dict = request.__dict__.copy()
+                req_dict.pop('_sa_instance_state', None)
+                return req_dict
+            return None
+    finally:
+        SessionLocal.remove()
+
+def get_event_join_requests_by_event(event_id: str):
+    """Get all join requests for an event"""
+    db = SessionLocal()
+    try:
+        requests = db.query(EventJoinRequestDB).filter(EventJoinRequestDB.event_id == event_id).all()
+        result = []
+        for req in requests:
+            req_dict = req.__dict__.copy()
+            req_dict.pop('_sa_instance_state', None)
+            result.append(req_dict)
+        return result
+    finally:
+        SessionLocal.remove()
+
+def get_event_join_requests_by_user(user_id: str):
+    """Get all join requests for a user"""
+    db = SessionLocal()
+    try:
+        requests = db.query(EventJoinRequestDB).filter(EventJoinRequestDB.user_id == user_id).all()
+        result = []
+        for req in requests:
+            req_dict = req.__dict__.copy()
+            req_dict.pop('_sa_instance_state', None)
+            result.append(req_dict)
+        return result
     finally:
         SessionLocal.remove()
 

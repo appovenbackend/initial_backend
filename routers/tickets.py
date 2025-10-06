@@ -132,6 +132,18 @@ async def register_free(payload: SecureFreeRegistration, request: Request):
     ev = next((e for e in events if e["id"] == eventId), None)
     if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
+
+    # Check if event requires approval
+    from utils.database import get_event_join_request
+    if ev.get("requires_approval", False):
+        # Check if user has an accepted join request
+        existing_request = get_event_join_request(userId, eventId)
+        if not existing_request or existing_request["status"] != "accepted":
+            if existing_request and existing_request["status"] == "rejected":
+                raise HTTPException(status_code=400, detail="Your join request was rejected. Please contact support if this is an error.")
+            else:
+                raise HTTPException(status_code=400, detail="This event requires approval. Please submit a join request first.")
+
     # expire check - only check if event has ended, not if it hasn't started yet
     try:
         end_time = _to_ist(ev["endAt"])
@@ -232,6 +244,16 @@ async def payments_verify(payload: SecurePaymentRequest, request: Request):
         raise HTTPException(status_code=404, detail="Event not found")
     if ev.get("priceINR", 0) <= 0:
         raise HTTPException(status_code=400, detail="Event is free")
+
+    # Check if event requires approval
+    if ev.get("requires_approval", False):
+        # Check if user has an accepted join request
+        existing_request = get_event_join_request(userId, eventId)
+        if not existing_request or existing_request["status"] != "accepted":
+            if existing_request and existing_request["status"] == "rejected":
+                raise HTTPException(status_code=400, detail="Your join request was rejected. Please contact support if this is an error.")
+            else:
+                raise HTTPException(status_code=400, detail="This event requires approval. Please submit a join request first.")
 
     ticket_id = "t_" + uuid4().hex[:10]
     issued = _now_ist_iso()
