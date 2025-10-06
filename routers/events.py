@@ -554,7 +554,7 @@ async def get_featured_slots_status(request: Request):
 @router.put("/featured/slots")
 @api_rate_limit("admin")
 @require_role(UserRole.ADMIN)
-async def update_featured_slots(slots_update: dict):
+async def update_featured_slots(slots_update: dict, request: Request):
     """
     Update one or both featured slots.
     Body should contain "featured_1" and/or "featured_2" with event IDs or null.
@@ -595,7 +595,7 @@ async def update_featured_slots(slots_update: dict):
 @router.put("/featured/slots/{slot}")
 @api_rate_limit("admin")
 @require_role(UserRole.ADMIN)
-async def set_specific_featured_slot(slot: str, event_id: str = Query(None)):
+async def set_specific_featured_slot(slot: str, event_id: str = Query(None), request: Request = None):
     """
     Set a specific featured slot to an event ID.
     slot must be 'featured_1' or 'featured_2'.
@@ -626,7 +626,7 @@ async def set_specific_featured_slot(slot: str, event_id: str = Query(None)):
 
 @router.delete("/featured/slots/{slot}")
 @require_role(UserRole.ADMIN)
-async def clear_specific_featured_slot(slot: str):
+async def clear_specific_featured_slot(slot: str, request: Request = None):
     """
     Clear a specific featured slot.
     slot must be 'featured_1' or 'featured_2'.
@@ -672,7 +672,7 @@ async def get_featured_events_list():
 
 @router.post("/featured")
 @require_role(UserRole.ADMIN)
-async def set_featured_events_list(event_ids: List[str]):
+async def set_featured_events_list(event_ids: List[str], request: Request):
     """
     Set 2 events as featured.
     Accepts a list of event IDs and stores the first 2 valid ones as featured.
@@ -718,7 +718,7 @@ async def set_featured_events_list(event_ids: List[str]):
 
 @router.post("/featured/{event_id}")
 @require_role(UserRole.ADMIN)
-async def toggle_featured_event(event_id: str):
+async def toggle_featured_event(event_id: str, request: Request):
     """
     Add or remove a single event from featured list.
     If event is already featured, it will be removed.
