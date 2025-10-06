@@ -425,6 +425,7 @@ async def delete_event(request: Request, event_id: str):
         db.close()
 
 @router.put("/{event_id}/activate")
+@require_role(UserRole.ADMIN)
 async def activate_event(request: Request, event_id: str):
     """
     Activate a specific event by setting isActive to true.
@@ -457,6 +458,7 @@ async def activate_event(request: Request, event_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to activate event: {str(e)}")
 
 @router.put("/{event_id}/toggle-activation")
+@require_role(UserRole.ADMIN)
 async def toggle_event_activation(request: Request, event_id: str):
     """
     Toggle the activation status of an event.
@@ -499,6 +501,8 @@ async def toggle_event_activation(request: Request, event_id: str):
 
 # New Featured Slot Management Endpoints
 @router.get("/featured/slots")
+@api_rate_limit("admin")
+@require_role(UserRole.ADMIN)
 async def get_featured_slots_status():
     """
     Get the current status of featured event slots.
@@ -530,6 +534,8 @@ async def get_featured_slots_status():
     return {"slots": enriched_slots}
 
 @router.put("/featured/slots")
+@api_rate_limit("admin")
+@require_role(UserRole.ADMIN)
 async def update_featured_slots(slots_update: dict):
     """
     Update one or both featured slots.
@@ -569,6 +575,8 @@ async def update_featured_slots(slots_update: dict):
     }
 
 @router.put("/featured/slots/{slot}")
+@api_rate_limit("admin")
+@require_role(UserRole.ADMIN)
 async def set_specific_featured_slot(slot: str, event_id: str = Query(None)):
     """
     Set a specific featured slot to an event ID.
@@ -599,6 +607,7 @@ async def set_specific_featured_slot(slot: str, event_id: str = Query(None)):
     }
 
 @router.delete("/featured/slots/{slot}")
+@require_role(UserRole.ADMIN)
 async def clear_specific_featured_slot(slot: str):
     """
     Clear a specific featured slot.
@@ -644,6 +653,7 @@ async def get_featured_events_list():
         raise HTTPException(status_code=500, detail=f"Failed to get featured events: {str(e)}")
 
 @router.post("/featured")
+@require_role(UserRole.ADMIN)
 async def set_featured_events_list(event_ids: List[str]):
     """
     Set 2 events as featured.
@@ -689,6 +699,7 @@ async def set_featured_events_list(event_ids: List[str]):
         raise HTTPException(status_code=500, detail=f"Failed to set featured events: {str(e)}")
 
 @router.post("/featured/{event_id}")
+@require_role(UserRole.ADMIN)
 async def toggle_featured_event(event_id: str):
     """
     Add or remove a single event from featured list.
@@ -735,6 +746,8 @@ async def toggle_featured_event(event_id: str):
 
 # Event Join Request Management Endpoints
 @router.post("/{event_id}/request_join")
+@api_rate_limit("authenticated")
+@require_authenticated
 async def request_to_join_event(event_id: str, request: Request):
     """
     Request to join an event that requires approval.

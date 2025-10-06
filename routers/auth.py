@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, Header
+from fastapi.responses import JSONResponse
 from uuid import uuid4
 from datetime import datetime, timedelta
 from utils.database import read_users, write_users
@@ -45,12 +46,28 @@ async def register(user_register: SecureUserRegister, request: Request):
         # Check if phone number already exists
         existing_phone = next((u for u in users if u["phone"] == user_register.phone), None)
         if existing_phone:
-            raise HTTPException(status_code=400, detail="Phone number already registered")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "PHONE_ALREADY_REGISTERED",
+                    "message": "Phone number already registered.",
+                    "code": "AUTH_005",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
 
         # Check if email already exists
         existing_email = next((u for u in users if u.get("email") == user_register.email), None)
         if existing_email:
-            raise HTTPException(status_code=400, detail="Email already registered")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "EMAIL_ALREADY_REGISTERED",
+                    "message": "Email already registered.",
+                    "code": "AUTH_006",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
 
         # Create new user with hashed password
         hashed_password = hash_password(user_register.password)
@@ -84,7 +101,16 @@ async def register(user_register: SecureUserRegister, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "REGISTRATION_FAILED",
+                "message": "Failed to complete user registration.",
+                "code": "AUTH_004",
+                "timestamp": datetime.now(IST).isoformat(),
+                "details": str(e) if os.getenv("DEBUG", "false").lower() == "true" else None
+            }
+        )
 
 @router.post("/login")
 @auth_rate_limit("login")
@@ -97,15 +123,39 @@ async def login(user_login: SecureUserLogin, request: Request):
         # Find user by phone number
         user = next((u for u in users if u["phone"] == user_login.phone), None)
         if not user:
-            raise HTTPException(status_code=401, detail="User not found. Please register first.")
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "error": "USER_NOT_FOUND",
+                    "message": "User not found. Please register first.",
+                    "code": "AUTH_001",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
 
         # Check if user has a password (registered users should have one)
         if not user.get("password"):
-            raise HTTPException(status_code=401, detail="User not found. Please register first.")
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "error": "USER_HAS_NO_PASSWORD",
+                    "message": "User found but has no password. Please complete registration with password.",
+                    "code": "AUTH_002",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
 
         # Verify password
         if not verify_password(user_login.password, user["password"]):
-            raise HTTPException(status_code=401, detail="Invalid password")
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "error": "INVALID_PASSWORD",
+                    "message": "Invalid password provided.",
+                    "code": "AUTH_003",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
 
         # Create access token using enhanced JWT security
         access_token = jwt_security_manager.create_token(user["id"], {"role": user.get("role", "user")})
@@ -130,7 +180,16 @@ async def login(user_login: SecureUserLogin, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "INTERNAL_ERROR",
+                "message": "Internal server error during login.",
+                "code": "AUTH_999",
+                "timestamp": datetime.now(IST).isoformat(),
+                "details": str(e) if os.getenv("DEBUG", "false").lower() == "true" else None
+            }
+        )
 
 @router.get("/users")
 #@api_rate_limit("admin")
@@ -143,7 +202,15 @@ async def get_user_by_phone(phone: str):
     users = _load_users()
     user = next((u for u in users if u["phone"] == phone), None)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "USER_NOT_FOUND",
+                "message": "User not found.",
+                "code": "AUTH_007",
+                "timestamp": datetime.now(IST).isoformat()
+            }
+        )
     return user
 
 @router.put("/user/{user_id}")
