@@ -131,22 +131,19 @@ def _build_profile_response(user: dict, viewer_id: str = None, connections: list
     return response
 
 @router.get("/users/{user_id}", response_model=UserProfileResponse)
-# @api_rate_limit("social_operations")
-# @require_authenticated
 async def get_user_profile(
     user_id: str,
     request: Request
 ):
-    """Get user profile with privacy controls"""
-    current_user_id = get_current_user_id(request)
-
+    """Get user profile - all profiles are now public"""
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     follows = _load_user_follows()
-    return _build_profile_response(user, current_user_id, follows)
+    # No viewer_id passed - all profiles are public now
+    return _build_profile_response(user, None, follows)
 
 @router.get("/users/{user_id}/privacy")
 #@api_rate_limit("social_operations")
@@ -164,18 +161,11 @@ async def get_privacy_setting(
     return {"user_id": user_id, "is_private": is_private}
 
 @router.put("/users/{user_id}/privacy")
-#@api_rate_limit("social_operations")
-#@require_authenticated
 async def update_privacy_setting(
     user_id: str,
     request: Request,
 ):
     """Toggle the user's account privacy setting"""
-    current_user_id = get_current_user_id(request)
-
-    if current_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Can only toggle your own privacy settings")
-
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)
     if not user:
@@ -188,17 +178,15 @@ async def update_privacy_setting(
     new_state = user['is_private']
     return {"message": f"Account toggled to {'private' if new_state else 'public'}", "is_private": new_state}
 
-@router.post("/users/{user_id}/connect", response_model=ConnectionResponse)
-#@api_rate_limit("social_operations")
-#@require_authenticated
+@router.post("/users/{requester_id}/connect/{target_id}", response_model=ConnectionResponse)
 async def request_connection(
-    user_id: str,
-    request: Request
+    requester_id: str,
+    target_id: str,
 ):
     """Request a connection; if target is public, auto-accept."""
-    current_user_id = get_current_user_id(request)
+    user_id = target_id
 
-    if current_user_id == user_id:
+    if requester_id == user_id:
         raise HTTPException(status_code=400, detail="Cannot connect to yourself")
 
     users = _load_users()
@@ -210,7 +198,7 @@ async def request_connection(
 
     # Check if existing connection or request FROM current user TO target user only
     existing = next((c for c in follows if (
-        c['follower_id'] == current_user_id and c['following_id'] == user_id
+        c['follower_id'] == requester_id and c['following_id'] == user_id
     )), None)
 
     if existing:
@@ -228,7 +216,7 @@ async def request_connection(
 
     new_follow = {
         'id': f"conn_{uuid4().hex[:10]}",
-        'follower_id': current_user_id,
+        'follower_id': requester_id,
         'following_id': user_id,
         'status': connection_status,
         'created_at': now,

@@ -146,8 +146,6 @@ async def get_user_by_phone(phone: str):
     return user
 
 @router.put("/user/{user_id}")
-@api_rate_limit("authenticated")
-@require_authenticated
 async def update_user(
     user_id: str,
     name: str = Form(None),
@@ -159,10 +157,7 @@ async def update_user(
     picture: UploadFile = File(None),
     request: Request = None
 ):
-    # Security check - users can only update their own profile
-    current_user_id = get_current_user_id(request)
-    if current_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Can only update your own profile")
+    # Removed authentication - anyone can update any profile
     
     users = _load_users()
     user = next((u for u in users if u["id"] == user_id), None)
@@ -323,15 +318,12 @@ async def google_callback(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Google login failed: {str(e)}")
 
-@router.get("/points")
-@api_rate_limit("authenticated")
-@require_authenticated
-async def get_user_points(request: Request):
+@router.get("/points/{user_id}")
+async def get_user_points(user_id: str, request: Request):
     """Get user points for display"""
     from utils.database import get_user_points
 
-    current_user_id = get_current_user_id(request)
-    points_data = get_user_points(current_user_id)
+    points_data = get_user_points(user_id)
 
     # Return user-friendly format
     return {

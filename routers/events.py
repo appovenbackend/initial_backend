@@ -246,7 +246,6 @@ async def get_event(event_id: str, request: Request):
     return Event(**e)
 
 @router.get("/{event_id}/registered_users")
-###@api_rate_limit("admin")
 async def get_registered_users_for_event(request: Request, event_id: str):
     # Check if event exists
     events = _load_events()
@@ -737,13 +736,11 @@ async def toggle_featured_event(event_id: str):
 
 # Event Join Request Management Endpoints
 @router.post("/{event_id}/request_join")
-async def request_to_join_event(event_id: str, request: Request):
+async def request_to_join_event(event_id: str, user_id: str, request: Request):
     """
     Request to join an event that requires approval.
-    Creates a join request for the authenticated user.
+    Creates a join request for the specified user.
     """
-    # Get current user
-    user_id = get_current_user_id(request)
 
     # Check if event exists and requires approval
     events = _load_events()
@@ -789,7 +786,6 @@ async def request_to_join_event(event_id: str, request: Request):
     }
 
 @router.get("/{event_id}/join_requests")
-@require_role(UserRole.ADMIN)
 async def get_event_join_requests(event_id: str, request: Request):
     """
     Get all join requests for a specific event (admin only).
@@ -823,17 +819,13 @@ async def get_event_join_requests(event_id: str, request: Request):
     }
 
 @router.put("/{event_id}/join_requests/{request_id}")
-@require_role(UserRole.ADMIN)
-async def review_join_request(event_id: str, request_id: str, action: str, admin_request: Request):
+async def review_join_request(event_id: str, request_id: str, action: str, admin_id: str):
     """
-    Approve or reject a join request (admin only).
+    Approve or reject a join request.
     action: 'accept' or 'reject'
     """
     if action not in ["accept", "reject"]:
         raise HTTPException(status_code=400, detail="Action must be 'accept' or 'reject'")
-
-    # Get admin info
-    admin_id = get_current_user_id(admin_request)
 
     # Check if request exists and is for the correct event
     request_details = read_event_join_requests()
