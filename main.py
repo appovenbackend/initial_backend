@@ -12,7 +12,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from middleware.security import SecurityHeadersMiddleware, RequestSizeLimitMiddleware, SecurityLoggingMiddleware
 from core.rate_limiting import limiter
-from routers import auth, events, tickets, payments, social
+from routers import auth, events, tickets, payments, social, migration
 from core.config import SECRET_KEY, IST, MAX_REQUEST_SIZE
 from utils.database import read_events, write_events, get_database_session
 from core.config import USE_POSTGRESQL, DATABASE_URL
@@ -121,6 +121,12 @@ try:
     logger.info("✅ Social router included successfully")
 except Exception as e:
     logger.error(f"❌ Failed to include social router: {e}")
+
+try:
+    app.include_router(migration.router)
+    logger.info("✅ Migration router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include migration router: {e}")
 
 # Ensure uploads directory exists
 os.makedirs("uploads", exist_ok=True)
