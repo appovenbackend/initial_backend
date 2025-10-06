@@ -48,7 +48,7 @@ def _to_ist(dt_iso: str):
     return dt.astimezone(IST)
 
 @router.post("/order")
-@api_rate_limit("payment")
+##@api_rate_limit("payment")
 async def create_payment_order(
     request: Request,
     phone: str = Query(..., description="User phone number"),
@@ -119,7 +119,7 @@ async def create_payment_order(
         raise HTTPException(status_code=500, detail="Failed to create payment order")
 
 @router.post("/verify")
-@api_rate_limit("payment")
+##@api_rate_limit("payment")
 async def verify_payment(request: Request, payload: SecurePaymentRequest):
     """
     Verify Razorpay payment and issue ticket.
@@ -235,7 +235,7 @@ async def verify_payment(request: Request, payload: SecurePaymentRequest):
     }
 
 @router.post("/webhook")
-@api_rate_limit("payment")
+##@api_rate_limit("payment")
 async def razorpay_webhook(request: Request):
     """
     Handle Razorpay webhook events for async payment processing.
@@ -352,7 +352,7 @@ async def razorpay_webhook(request: Request):
         raise HTTPException(status_code=500, detail="Webhook processing failed")
 
 @router.get("/orders/{order_id}")
-@api_rate_limit("payment")
+#@api_rate_limit("payment")
 async def get_order_status(order_id: str, request: Request):
     """Get payment order status"""
     if order_id not in payment_orders:
@@ -369,7 +369,7 @@ async def get_order_status(order_id: str, request: Request):
     }
 
 @router.get("/test")
-#@api_rate_limit("admin")
+##@api_rate_limit("admin")
 async def test_payment_integration(request: Request):
     """Test endpoint to verify Razorpay configuration"""
     return {

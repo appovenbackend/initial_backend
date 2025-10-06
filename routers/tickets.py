@@ -110,7 +110,7 @@ def _to_ist(dt_iso: str):
 
 
 @router.post("/register/free", response_model=Ticket)
-@api_rate_limit("ticket_operations")
+#@api_rate_limit("ticket_operations")
 async def register_free(payload: SecureFreeRegistration, request: Request):
     """
     payload: { "phone": "...", "eventId": "..." }
@@ -215,7 +215,7 @@ async def register_free(payload: SecureFreeRegistration, request: Request):
     return new_ticket
 
 @router.post("/payments/verify", response_model=Ticket)
-@api_rate_limit("payment")
+##@api_rate_limit("payment")
 async def payments_verify(payload: SecurePaymentRequest, request: Request):
     """Verify Razorpay signature and issue ticket on success.
     payload: { phone, eventId, razorpay_order_id, razorpay_payment_id, razorpay_signature }
@@ -286,7 +286,7 @@ async def payments_verify(payload: SecurePaymentRequest, request: Request):
     return new_ticket
 
 @router.get("/tickets/{user_id}")
-#@api_rate_limit("authenticated")
+###@api_rate_limit("authenticated")
 #@require_authenticated
 async def get_tickets_for_user(user_id: str, request: Request):
     # Security check - users can only view their own tickets
@@ -318,7 +318,7 @@ async def get_tickets_for_user(user_id: str, request: Request):
     return enhanced_tickets
 
 @router.get("/tickets/ticket/{ticket_id}")
-#@api_rate_limit("authenticated")
+###@api_rate_limit("authenticated")
 #@require_authenticated
 async def get_ticket(ticket_id: str, request: Request):
     # Security check - users can only view their own tickets
@@ -345,7 +345,7 @@ async def get_ticket(ticket_id: str, request: Request):
     return response
 
 @router.post("/receiveQrToken")
-@api_rate_limit("ticket_operations")
+#@api_rate_limit("ticket_operations")
 async def receive_qr_token(token: str, eventId: str, request: Request):
     """
     Receives QR token string from frontend and stores it in database.
@@ -376,7 +376,7 @@ async def receive_qr_token(token: str, eventId: str, request: Request):
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @router.get("/getAllQrTokens")
-#@api_rate_limit("admin")
+##@api_rate_limit("admin")
 async def get_all_qr_tokens(request: Request):
     """
     Retrieves all saved QR tokens from the database.
@@ -385,7 +385,7 @@ async def get_all_qr_tokens(request: Request):
     return {"qr_tokens": received_tokens, "count": len(received_tokens)}
 
 @router.get("/getQrTokensByEvent/{event_id}")
-#@api_rate_limit("admin")
+##@api_rate_limit("admin")
 async def get_qr_tokens_by_event(event_id: str, request: Request):
     """
     Retrieves QR tokens for a specific event.
@@ -397,7 +397,7 @@ async def get_qr_tokens_by_event(event_id: str, request: Request):
 from fastapi import Request
 
 @router.post("/validate")
-@api_rate_limit("ticket_operations")
+#@api_rate_limit("ticket_operations")
 async def validate_token(body: SecureTicketValidation, request: Request):
     """
     Expects: { "token": "<jwt>", "eventId": "<event_id>" }

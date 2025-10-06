@@ -131,8 +131,8 @@ def _build_profile_response(user: dict, viewer_id: str = None, connections: list
     return response
 
 @router.get("/users/{user_id}", response_model=UserProfileResponse)
-#@api_rate_limit("social_operations")
-#@require_authenticated
+# @api_rate_limit("social_operations")
+# @require_authenticated
 async def get_user_profile(
     user_id: str,
     request: Request
