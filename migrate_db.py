@@ -290,7 +290,8 @@ def create_user_follows_table():
         print(f"❌ User follows table creation failed: {e}")
         raise
 
-if __name__ == "__main__":
+def run_migrations():
+    """Run all database migrations - callable from main.py"""
     print("🚀 Starting database migration for Fitness Event Booking API")
     print("=" * 60)
 
@@ -299,6 +300,7 @@ if __name__ == "__main__":
         migrate_received_qr_tokens_table()
         migrate_users_table()
         create_user_follows_table()
+        migrate_event_approval_system()  # Add our new migration
 
         print("\n" + "=" * 60)
         print("🎉 All database migrations completed successfully!")
@@ -308,4 +310,82 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n❌ Migration failed: {e}")
         print("Please check your DATABASE_URL and PostgreSQL connection.")
-        sys.exit(1)
+        raise
+
+def migrate_event_approval_system():
+    """Add requires_approval column and event_join_requests table"""
+    if not USE_POSTGRESQL:
+        print("⚠️  Event approval migration only needed for PostgreSQL. Skipping for SQLite.")
+        return
+
+    if not DATABASE_URL:
+        print("❌ No DATABASE_URL found. Cannot run event approval migration.")
+        return
+
+    print("🔄 Starting event approval system migration...")
+    engine = create_engine(DATABASE_URL)
+
+    try:
+        with engine.connect() as conn:
+            # Check if requires_approval column exists
+            result = conn.execute(text("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'events'
+                AND column_name = 'requires_approval'
+            """))
+
+            requires_approval_exists = result.fetchone() is not None
+
+            if not requires_approval_exists:
+                print("📝 Adding requires_approval column to events table...")
+                conn.execute(text("""
+                    ALTER TABLE events
+                    ADD COLUMN requires_approval BOOLEAN DEFAULT FALSE
+                """))
+                conn.commit()
+                print("✅ Added requires_approval column")
+            else:
+                print("ℹ️  requires_approval column already exists")
+
+            # Check if event_join_requests table exists
+            result = conn.execute(text("""
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_name = 'event_join_requests'
+            """))
+
+            table_exists = result.fetchone() is not None
+
+            if not table_exists:
+                print("📝 Creating event_join_requests table...")
+                conn.execute(text("""
+                    CREATE TABLE event_join_requests (
+                        id VARCHAR PRIMARY KEY,
+                        user_id VARCHAR NOT NULL,
+                        event_id VARCHAR NOT NULL,
+                        status VARCHAR NOT NULL DEFAULT 'pending',
+                        requested_at VARCHAR NOT NULL,
+                        reviewed_at VARCHAR NULL,
+                        reviewed_by VARCHAR NULL
+                    )
+                """))
+                conn.commit()
+
+                # Create indexes for performance
+                conn.execute(text('CREATE INDEX idx_event_join_requests_user_id ON event_join_requests(user_id)'))
+                conn.execute(text('CREATE INDEX idx_event_join_requests_event_id ON event_join_requests(event_id)'))
+                conn.commit()
+
+                print("✅ Created event_join_requests table with indexes")
+            else:
+                print("ℹ️  event_join_requests table already exists")
+
+        print("🎉 Event approval system migration completed!")
+
+    except Exception as e:
+        print(f"❌ Event approval migration failed: {e}")
+        raise
+
+if __name__ == "__main__":
+    run_migrations()
