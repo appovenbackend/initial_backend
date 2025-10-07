@@ -4,6 +4,7 @@ Provides comprehensive notification functionality for events, payments, and user
 """
 from sqlalchemy import Column, String, Text, Boolean, DateTime, ForeignKey, Integer
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import exc as sa_exc
 from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta
 from core.config import IST
@@ -91,7 +92,16 @@ class NotificationService:
     def __init__(self):
         from utils.database import SessionLocal
         self.db = SessionLocal()
-        self._initialize_templates()
+        # Initialize templates only if the templates table exists; otherwise, continue startup
+        try:
+            self._initialize_templates()
+        except (sa_exc.ProgrammingError, sa_exc.OperationalError) as e:
+            # Most likely the table doesn't exist yet (e.g., before migrations). Skip initialization.
+            self.db.rollback()
+            logger.warning(
+                "Skipping notification templates initialization; table may not exist yet",
+                extra={"error": str(e)}
+            )
     
     def _initialize_templates(self):
         """Initialize default notification templates"""
@@ -134,27 +144,35 @@ class NotificationService:
             }
         ]
         
-        for template_data in templates:
-            existing = self.db.query(NotificationTemplateDB).filter(
-                NotificationTemplateDB.template_name == template_data["template_name"]
-            ).first()
+        try:
+            for template_data in templates:
+                existing = self.db.query(NotificationTemplateDB).filter(
+                    NotificationTemplateDB.template_name == template_data["template_name"]
+                ).first()
+                
+                if not existing:
+                    template = NotificationTemplateDB(
+                        id=f"template_{template_data['template_name']}",
+                        template_name=template_data["template_name"],
+                        notification_type=template_data["notification_type"],
+                        channel=template_data["channel"],
+                        subject=template_data["subject"],
+                        title=template_data["title"],
+                        message_template=template_data["message_template"],
+                        variables=template_data["variables"],
+                        created_at=datetime.now(IST).isoformat(),
+                        updated_at=datetime.now(IST).isoformat()
+                    )
+                    self.db.add(template)
             
-            if not existing:
-                template = NotificationTemplateDB(
-                    id=f"template_{template_data['template_name']}",
-                    template_name=template_data["template_name"],
-                    notification_type=template_data["notification_type"],
-                    channel=template_data["channel"],
-                    subject=template_data["subject"],
-                    title=template_data["title"],
-                    message_template=template_data["message_template"],
-                    variables=template_data["variables"],
-                    created_at=datetime.now(IST).isoformat(),
-                    updated_at=datetime.now(IST).isoformat()
-                )
-                self.db.add(template)
-        
-        self.db.commit()
+            self.db.commit()
+        except (sa_exc.ProgrammingError, sa_exc.OperationalError) as e:
+            # Table missing or not migrated yet
+            self.db.rollback()
+            logger.warning(
+                "Notification templates not initialized; table missing",
+                extra={"error": str(e)}
+            )
     
     def create_notification(self, user_id: str, notification_type: NotificationType,
                            channel: NotificationChannel, title: str, message: str,
