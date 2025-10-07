@@ -132,7 +132,8 @@ async def create_event(ev: SecureEventCreate, request: Request):
             coordinate_long=ev.coordinate_long,
             address_url=ev.address_url,
             registration_link=ev.registration_link,
-            requires_approval=ev.requires_approval if ev.requires_approval is not None else False
+            requires_approval=ev.requires_approval if ev.requires_approval is not None else False,
+            registration_open=ev.registration_open if ev.registration_open is not None else True
         ).dict()
 
         # Save only the new event (write_events now handles upsert)
@@ -809,6 +810,10 @@ async def request_to_join_event(event_id: str, request: Request):
     event = next((e for e in events if e["id"] == event_id), None)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+
+    # Check if registration is open for this event
+    if not event.get("registration_open", True):
+        raise HTTPException(status_code=400, detail="Registration is closed for this event")
 
     if not event.get("requires_approval", False):
         raise HTTPException(status_code=400, detail="This event does not require approval")

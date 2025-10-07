@@ -133,6 +133,10 @@ async def register_free(payload: SecureFreeRegistration, request: Request):
     if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
 
+    # Check if registration is open for this event
+    if not ev.get("registration_open", True):
+        raise HTTPException(status_code=400, detail="Registration is closed for this event")
+
     # Check if event requires approval
     from utils.database import get_event_join_request
     if ev.get("requires_approval", False):
@@ -244,6 +248,10 @@ async def payments_verify(payload: SecurePaymentRequest, request: Request):
         raise HTTPException(status_code=404, detail="Event not found")
     if ev.get("priceINR", 0) <= 0:
         raise HTTPException(status_code=400, detail="Event is free")
+
+    # Check if registration is open for this event
+    if not ev.get("registration_open", True):
+        raise HTTPException(status_code=400, detail="Registration is closed for this event")
 
     # Check if event requires approval
     if ev.get("requires_approval", False):

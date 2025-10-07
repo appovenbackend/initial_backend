@@ -18,6 +18,7 @@ class CreateEventIn(BaseModel):
     address_url: Optional[str] = None
     registration_link: Optional[str] = None
     requires_approval: Optional[bool] = False
+    registration_open: Optional[bool] = True
 
 class Event(BaseModel):
     id: str
@@ -38,3 +39,4 @@ class Event(BaseModel):
     address_url: Optional[str] = None
     registration_link: Optional[str] = None
     requires_approval: bool = False
+    registration_open: bool = True

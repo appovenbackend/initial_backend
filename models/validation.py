@@ -26,6 +26,7 @@ class SecureEventCreate(BaseModel):
     address_url: Optional[str] = Field(None, pattern=r'^https?://.+')
     registration_link: Optional[str] = Field(None, pattern=r'^https?://.+')
     requires_approval: Optional[bool] = False
+    registration_open: Optional[bool] = True
     
     @validator('endAt')
     def validate_end_after_start(cls, v, values):
@@ -88,6 +89,7 @@ class SecureEventUpdate(BaseModel):
     address_url: Optional[str] = Field(None, pattern=r'^https?://.+')
     registration_link: Optional[str] = Field(None, pattern=r'^https?://.+')
     requires_approval: Optional[bool] = None
+    registration_open: Optional[bool] = None
 
 class SecureFreeRegistration(BaseModel):
     phone: str = Field(..., pattern=r'^\+?[1-9]\d{1,14}$')
