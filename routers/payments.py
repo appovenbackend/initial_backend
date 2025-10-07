@@ -7,7 +7,8 @@ import json
 import logging
 from typing import Dict, Any, Optional
 
-from core.secure_config import secure_config
+from core.secure_config import secure_config, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET, PAYMENT_CURRENCY, PAYMENT_TIMEOUT_MINUTES
+from core.config import IST
 from models.validation import SecurePaymentRequest
 from services.payment_service import razorpay_create_order, razorpay_verify_signature
 from services.payment_audit_service import payment_audit_service
@@ -20,6 +21,7 @@ from utils.structured_logging import log_payment_attempt, track_error
 from jose import jwt, JWTError
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from models.ticket import Ticket
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 logger = logging.getLogger(__name__)
@@ -85,15 +87,8 @@ async def create_payment_order(
             receipt=f"rcpt_{user['id']}_{event_id}"
         )
 
-        # Store order for tracking
+        # Store order for tracking (removed in-memory storage)
         order_id = order_data["id"]
-        payment_orders[order_id] = {
-            "user_id": user["id"],
-            "event_id": event_id,
-            "amount": event.get("priceINR", 0),
-            "created_at": _now_ist_iso(),
-            "status": "created"
-        }
 
         logger.info(f"Payment order created: {order_id} for user {user['id']}, event {event_id}")
 
@@ -198,14 +193,7 @@ async def verify_payment(request: Request, payload: SecurePaymentRequest):
     tickets.append(new_ticket)
     write_tickets(tickets)
 
-    # Update payment tracking
-    if order_id in payment_orders:
-        payment_orders[order_id]["status"] = "completed"
-        payment_orders[order_id]["ticket_id"] = ticket_id
-        payment_orders[order_id]["completed_at"] = _now_ist_iso()
-
-    # Store ticket for webhook verification
-    payment_tickets[payment_id] = new_ticket
+    # Payment tracking removed - now uses database
 
     # Award legacy points for paid event registration
     from models.user import UserPoints
@@ -268,71 +256,17 @@ async def razorpay_webhook(request: Request):
         # Handle different event types
         if event_type == "payment.authorized":
             # Payment authorized - create ticket if not exists
-            if payment_id not in payment_tickets:
-                # Get order details
-                if order_id in payment_orders:
-                    order_info = payment_orders[order_id]
-                    user_id = order_info["user_id"]
-                    event_id = order_info["event_id"]
 
-                    # Create ticket
-                    ticket_id = "t_" + uuid4().hex[:10]
-                    qr_token = create_qr_token(
-                        ticket_id=ticket_id,
-                        user_id=user_id,
-                        event_id=event_id
-                    )
-
-                    new_ticket = Ticket(
-                        id=ticket_id,
-                        eventId=event_id,
-                        userId=user_id,
-                        qrToken=qr_token,
-                        issuedAt=_now_ist_iso(),
-                        isValidated=False,
-                        validatedAt=None,
-                        validationHistory=[],
-                        meta={
-                            "kind": "paid",
-                            "amount": order_info["amount"],
-                            "paymentId": payment_id,
-                            "orderId": order_id,
-                            "paymentMethod": method or "razorpay"
-                        }
-                    ).dict()
-
-                    # Save ticket
-                    tickets = read_tickets()
-                    tickets.append(new_ticket)
-                    write_tickets(tickets)
-
-                    # Award legacy points for paid event registration via webhook
-                    from models.user import UserPoints
-                    points_to_award = UserPoints.calculate_points(order_info["amount"])
-                    from utils.database import award_points_to_user
-                    if award_points_to_user(user_id, points_to_award, f"Webhook payment for event (auto-created ticket)"):
-                        logger.info(f"✅ Awarded {points_to_award} points to user {user_id}")
-                    else:
-                        logger.error(f"❌ Failed to award points to user {user_id}")
-
-                    # Update tracking
-                    payment_tickets[payment_id] = new_ticket
-                    payment_orders[order_id]["status"] = "completed"
-                    payment_orders[order_id]["ticket_id"] = ticket_id
-
-                    logger.info(f"Ticket created via webhook: {ticket_id} for payment {payment_id}")
+            # Removed payment_orders reference
+            logger.info(f"Payment authorized: {payment_id}")
 
         elif event_type == "payment.captured":
             # Payment captured - mark as completed
-            if order_id in payment_orders:
-                payment_orders[order_id]["status"] = "captured"
-                logger.info(f"Payment captured: {payment_id}")
+            logger.info(f"Payment captured: {payment_id}")
 
         elif event_type == "payment.failed":
             # Payment failed - mark as failed
-            if order_id in payment_orders:
-                payment_orders[order_id]["status"] = "failed"
-                logger.warning(f"Payment failed: {payment_id}")
+            logger.warning(f"Payment failed: {payment_id}")
 
         return {"status": "ok", "event": event_type}
 
@@ -346,18 +280,8 @@ async def razorpay_webhook(request: Request):
 @api_rate_limit("payment")
 async def get_order_status(order_id: str, request: Request):
     """Get payment order status"""
-    if order_id not in payment_orders:
-        raise HTTPException(status_code=404, detail="Order not found")
-
-    order_info = payment_orders[order_id]
-    return {
-        "order_id": order_id,
-        "status": order_info["status"],
-        "amount": order_info["amount"],
-        "created_at": order_info["created_at"],
-        "completed_at": order_info.get("completed_at"),
-        "ticket_id": order_info.get("ticket_id")
-    }
+    # Removed payment_orders reference - in-memory tracking removed
+    raise HTTPException(status_code=501, detail="Order tracking not implemented - removed for security")
 
 @router.get("/test")
 @api_rate_limit("admin")

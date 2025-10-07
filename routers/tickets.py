@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Request, Header
 from uuid import uuid4
 from datetime import datetime
 from dateutil import parser
-from utils.database import read_users, write_users, read_events, write_events, read_tickets, write_tickets, read_received_qr_tokens, write_received_qr_tokens
+from utils.database import get_event_join_request, read_users, write_users, read_events, write_events, read_tickets, write_tickets, read_received_qr_tokens, write_received_qr_tokens
 from core.config import IST
 from core.jwt_security import jwt_security_manager
 

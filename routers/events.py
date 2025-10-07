@@ -1,13 +1,14 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from uuid import uuid4
+import os
 from datetime import datetime, timedelta
 from dateutil import parser
 from core.rate_limiting import api_rate_limit, generous_rate_limit
 from core.rbac import require_role, UserRole, require_authenticated
 from middleware.jwt_auth import get_current_user_id
 from models.validation import SecureEventCreate, SecureEventUpdate
-from utils.input_validator import input_validator
+from utils.security import sql_protection, input_validator
 from utils.structured_logging import log_event_creation, track_error
 from models.user import User
 from models.ticket import Ticket
@@ -15,7 +16,7 @@ from models.event import Event
 from utils.database import (
     read_events, write_events, read_tickets, read_users, read_event_join_requests,
     create_event_join_request, get_event_join_request, update_event_join_request_status,
-    get_event_join_requests_by_event, TicketDB, ReceivedQrTokenDB, EventDB
+    get_event_join_requests_by_event, TicketDB, ReceivedQrTokenDB, EventDB, write_tickets, write_users
 )
 from core.config import IST
 from services.qr_service import create_qr_token
