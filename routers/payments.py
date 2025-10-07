@@ -8,6 +8,7 @@ import logging
 from typing import Dict, Any, Optional
 
 from core.secure_config import secure_config
+from models.validation import SecurePaymentRequest
 from services.payment_service import razorpay_create_order, razorpay_verify_signature
 from services.payment_audit_service import payment_audit_service
 from utils.database import read_users, read_events, read_tickets, write_tickets
