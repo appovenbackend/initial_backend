@@ -15,7 +15,8 @@ from middleware.jwt_auth import JWTAuthMiddleware
 from middleware.request_tracing import RequestTracingMiddleware
 from core.rate_limiting import limiter
 from routers import auth, events, tickets, payments, social, migration
-from core.secure_config import secure_config, CORS_ORIGINS, MAX_REQUEST_SIZE, IST
+from core.secure_config import secure_config, CORS_ORIGINS, MAX_REQUEST_SIZE
+from core.config import IST
 from utils.structured_logging import setup_logging, error_tracker, get_performance_metrics
 from services.notification_service import process_pending_notifications
 from utils.database import read_events, write_events, get_database_session
