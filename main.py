@@ -81,7 +81,10 @@ app.add_middleware(SlowAPIMiddleware)
 # Security middleware (order matters!)
 app.add_middleware(SecurityLoggingMiddleware)  # First - log all requests
 app.add_middleware(RequestSizeLimitMiddleware, max_size=MAX_REQUEST_SIZE)  # Configurable limit
-app.add_middleware(SecurityHeadersMiddleware)  # Add security headers
+
+# Add JWT authentication middleware EARLY (replaces insecure X-User-ID header)
+# This must run before CORS and other middlewares that might need user context
+app.add_middleware(JWTAuthMiddleware)
 
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
@@ -96,8 +99,7 @@ app.add_middleware(
 # Add session middleware for OAuth
 app.add_middleware(SessionMiddleware, secret_key=secure_config.jwt_secret)
 
-# Add JWT authentication middleware (replaces insecure X-User-ID header)
-app.add_middleware(JWTAuthMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)  # Add security headers
 
 # Add request tracing middleware
 app.add_middleware(RequestTracingMiddleware)
@@ -175,6 +177,7 @@ def auth_test_endpoint(request: Request):
         "request_path": request.url.path,
         "request_method": request.method,
         "auth_header": request.headers.get("Authorization", "Not provided"),
+        "middleware_order_test": "JWT middleware should run before this endpoint",
         "timestamp": datetime.now(IST).isoformat()
     }
 
