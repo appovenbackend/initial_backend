@@ -39,26 +39,47 @@ class JWTSecurityManager:
         try:
             # Check if token is blacklisted
             if self.is_token_blacklisted(token):
+                logger.warning("Token found in blacklist")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Token has been revoked"
                 )
-            
+
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            
+
             # Additional security checks
             if payload.get("type") != "access":
+                logger.warning(f"Invalid token type: {payload.get('type')}")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid token type"
                 )
-            
+
+            # Check if token has expired
+            exp = payload.get("exp")
+            if exp:
+                from datetime import datetime
+                if datetime.utcnow().timestamp() > exp:
+                    logger.warning("Token has expired")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Token has expired"
+                    )
+
+            logger.debug(f"Token verified successfully for user: {payload.get('sub')}")
             return payload
-            
-        except JWTError:
+
+        except JWTError as e:
+            logger.warning(f"JWT decode error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token"
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error during token verification: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token verification failed"
             )
     
     def blacklist_token(self, token: str):

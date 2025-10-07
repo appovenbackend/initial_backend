@@ -48,59 +48,62 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             # Generate request ID for tracing
             request_id = str(uuid.uuid4())
             request.state.request_id = request_id
-            
+
             # Check if path is exempt from authentication
             if self._is_exempt_path(request.url.path):
                 response = await call_next(request)
                 response.headers["X-Request-ID"] = request_id
                 return response
-            
+
             # Extract JWT token from Authorization header
             auth_header = request.headers.get("Authorization")
             if not auth_header:
                 logger.warning(f"No Authorization header for {request.method} {request.url.path} from {request.client.host}")
                 return self._unauthorized_response("Missing Authorization header", request_id)
-            
+
             # Parse Bearer token
             try:
                 scheme, token = auth_header.split(" ", 1)
                 if scheme.lower() != "bearer":
-                    return self._unauthorized_response("Invalid authorization scheme", request_id)
+                    logger.warning(f"Invalid auth scheme '{scheme}' for {request.method} {request.url.path}")
+                    return self._unauthorized_response("Invalid authorization scheme. Expected 'Bearer'", request_id)
             except ValueError:
-                return self._unauthorized_response("Invalid authorization header format", request_id)
-            
+                logger.warning(f"Malformed auth header '{auth_header}' for {request.method} {request.url.path}")
+                return self._unauthorized_response("Invalid authorization header format. Expected 'Bearer <token>'", request_id)
+
             # Validate JWT token
             try:
                 payload = jwt_security_manager.verify_token(token)
                 user_id = payload.get("sub")
-                
+
                 if not user_id:
-                    return self._unauthorized_response("Invalid token payload", request_id)
-                
+                    logger.warning(f"No user_id in token payload for {request.method} {request.url.path}")
+                    return self._unauthorized_response("Invalid token payload - missing user ID", request_id)
+
                 # Set user context in request state
                 request.state.user_id = user_id
                 request.state.user_role = payload.get("role", "user")
                 request.state.jwt_payload = payload
-                
-                logger.info(f"Authenticated user {user_id} for {request.method} {request.url.path}")
-                
+
+                logger.info(f"✅ Authenticated user {user_id} for {request.method} {request.url.path}")
+
             except HTTPException as e:
                 logger.warning(f"JWT validation failed for {request.method} {request.url.path}: {e.detail}")
                 return self._unauthorized_response(e.detail, request_id)
             except JWTError as e:
                 logger.warning(f"JWT decode error for {request.method} {request.url.path}: {str(e)}")
-                return self._unauthorized_response("Invalid token", request_id)
+                return self._unauthorized_response("Invalid or expired token", request_id)
             except Exception as e:
                 logger.error(f"Unexpected JWT error for {request.method} {request.url.path}: {str(e)}")
                 return self._unauthorized_response("Authentication error", request_id)
-            
+
             # Process request with authenticated user
             response = await call_next(request)
             response.headers["X-Request-ID"] = request_id
             response.headers["X-User-ID"] = user_id  # For backward compatibility during transition
-            
+
             return response
-            
+
         except Exception as e:
             logger.error(f"JWT middleware error for {request.method} {request.url.path}: {str(e)}")
             return JSONResponse(
@@ -139,10 +142,24 @@ def get_current_user_id(request: Request) -> str:
     Replaces the insecure X-User-ID header approach
     """
     user_id = getattr(request.state, 'user_id', None)
+
+    # Enhanced debugging for authentication issues
     if not user_id:
+        # Log debugging information
+        logger.warning("get_current_user_id: No user_id found in request.state")
+        logger.warning(f"Request path: {request.url.path}")
+        logger.warning(f"Request method: {request.method}")
+        logger.warning(f"Request headers: {dict(request.headers)}")
+        logger.warning(f"Request state attributes: {dir(request.state)}")
+
+        # Check if JWT payload exists but user_id is missing
+        jwt_payload = getattr(request.state, 'jwt_payload', None)
+        if jwt_payload:
+            logger.warning(f"JWT payload exists but no user_id: {jwt_payload}")
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not authenticated"
+            detail="User not authenticated - JWT middleware did not set user_id"
         )
     return user_id
 

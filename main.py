@@ -158,6 +158,26 @@ def test_endpoint():
         "timestamp": datetime.now(IST).isoformat()
     }
 
+@app.get("/auth-test")
+def auth_test_endpoint(request: Request):
+    """Test endpoint to debug authentication issues"""
+    user_id = getattr(request.state, 'user_id', None)
+    user_role = getattr(request.state, 'user_role', None)
+    jwt_payload = getattr(request.state, 'jwt_payload', None)
+
+    return {
+        "status": "ok",
+        "message": "Auth test endpoint",
+        "authenticated": user_id is not None,
+        "user_id": user_id,
+        "user_role": user_role,
+        "jwt_payload": jwt_payload,
+        "request_path": request.url.path,
+        "request_method": request.method,
+        "auth_header": request.headers.get("Authorization", "Not provided"),
+        "timestamp": datetime.now(IST).isoformat()
+    }
+
 @app.get("/openapi-test")
 def openapi_test():
     """Test OpenAPI schema generation"""
