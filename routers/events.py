@@ -8,7 +8,8 @@ from core.rate_limiting import api_rate_limit, generous_rate_limit
 from core.rbac import require_role, UserRole, require_authenticated
 from middleware.jwt_auth import get_current_user_id
 from models.validation import SecureEventCreate, SecureEventUpdate
-from utils.security import sql_protection, input_validator
+from utils.security import sql_protection
+from utils.input_validator import input_validator
 from utils.structured_logging import log_event_creation, track_error
 from models.user import User
 from models.ticket import Ticket
