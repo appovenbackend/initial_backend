@@ -12,6 +12,7 @@ from models.validation import SecureUserRegister, SecureUserLogin, SecureUserUpd
 from models.user import User
 from utils.input_validator import input_validator
 from utils.structured_logging import log_user_registration, track_error
+from utils.security import sql_protection
 from services.notification_service import send_welcome_notification
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
@@ -298,7 +299,6 @@ async def get_user_by_phone(phone: str):
 
 @router.put("/user/{user_id}")
 @api_rate_limit("authenticated")
-@require_authenticated
 async def update_user(
     user_id: str,
     name: str = Form(None),
@@ -308,10 +308,10 @@ async def update_user(
     strava_link: str = Form(None),
     instagram_id: str = Form(None),
     picture: UploadFile = File(None),
-    request: Request = None
+    request: Request = None,
+    current_user_id: str = Depends(get_current_user_id)
 ):
     # Security check - users can only update their own profile
-    current_user_id = get_current_user_id(request)
     if current_user_id != user_id:
         return JSONResponse(
             status_code=403,
@@ -551,12 +551,10 @@ async def google_callback(request: Request):
 
 @router.get("/points")
 @api_rate_limit("authenticated")
-@require_authenticated
-async def get_user_points(request: Request):
+async def get_user_points(request: Request, current_user_id: str = Depends(get_current_user_id)):
     """Get user points for display"""
     from utils.database import get_user_points
 
-    current_user_id = get_current_user_id(request)
     points_data = get_user_points(current_user_id)
 
     # Return user-friendly format
