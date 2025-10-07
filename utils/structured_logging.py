@@ -290,3 +290,47 @@ def log_payment_attempt(payment_id: str, user_id: str, amount: int, status: str,
 def log_ticket_purchase(ticket_id: str, user_id: str, event_id: str, amount: int, request: Request = None):
     """Log ticket purchase event"""
     business_logger.log_ticket_purchase(ticket_id, user_id, event_id, amount, request)
+
+def get_performance_metrics() -> Dict[str, Any]:
+    """Get application performance metrics"""
+    import psutil
+    import time
+
+    # Get system metrics
+    memory = psutil.virtual_memory()
+    cpu_percent = psutil.cpu_percent(interval=1)
+    disk = psutil.disk_usage('/')
+
+    # Get process metrics
+    process = psutil.Process()
+    process_memory = process.memory_info()
+    process_cpu = process.cpu_percent()
+
+    # Get uptime (approximate)
+    uptime_seconds = time.time() - process.create_time()
+
+    return {
+        "system": {
+            "cpu_percent": cpu_percent,
+            "memory": {
+                "total": memory.total,
+                "available": memory.available,
+                "percent": memory.percent,
+                "used": memory.used
+            },
+            "disk": {
+                "total": disk.total,
+                "free": disk.free,
+                "percent": disk.percent
+            }
+        },
+        "process": {
+            "cpu_percent": process_cpu,
+            "memory_rss": process_memory.rss,
+            "memory_vms": process_memory.vms,
+            "uptime_seconds": uptime_seconds,
+            "threads": process.num_threads(),
+            "open_files": len(process.open_files())
+        },
+        "timestamp": datetime.now(IST).isoformat()
+    }
