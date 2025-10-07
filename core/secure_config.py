@@ -145,6 +145,16 @@ class SecureConfig:
     def refresh_token_expire_days(self) -> int:
         """Get refresh token expiration time in days"""
         return int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+
+    @property
+    def payment_currency(self) -> str:
+        """Get payment currency"""
+        return os.getenv("PAYMENT_CURRENCY", "INR")
+
+    @property
+    def payment_timeout_minutes(self) -> int:
+        """Get payment timeout in minutes"""
+        return int(os.getenv("PAYMENT_TIMEOUT_MINUTES", "10"))
     
     def validate_config(self) -> bool:
         """Validate all configuration"""
@@ -188,3 +198,5 @@ ENABLE_REQUEST_LOGGING = secure_config.enable_request_logging
 LOG_LEVEL = secure_config.log_level
 ACCESS_TOKEN_EXPIRE_MINUTES = secure_config.access_token_expire_minutes
 REFRESH_TOKEN_EXPIRE_DAYS = secure_config.refresh_token_expire_days
+PAYMENT_CURRENCY = secure_config.payment_currency
+PAYMENT_TIMEOUT_MINUTES = secure_config.payment_timeout_minutes
