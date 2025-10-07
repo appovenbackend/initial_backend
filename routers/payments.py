@@ -7,25 +7,15 @@ import json
 import logging
 from typing import Dict, Any, Optional
 
-from core.config import (
-    RAZORPAY_KEY_ID,
-    RAZORPAY_KEY_SECRET,
-    RAZORPAY_WEBHOOK_SECRET,
-    PAYMENT_CURRENCY,
-    PAYMENT_TIMEOUT_MINUTES,
-    IST,
-    SECRET_KEY,
-    ALGORITHM,
-    JWT_KID
-)
-from core.jwt_security import jwt_security_manager
+from core.secure_config import secure_config
 from services.payment_service import razorpay_create_order, razorpay_verify_signature
+from services.payment_audit_service import payment_audit_service
 from utils.database import read_users, read_events, read_tickets, write_tickets
 from services.qr_service import create_qr_token
 from core.rate_limiting import api_rate_limit
-from core.rbac import require_authenticated, require_role, UserRole
-from models.validation import SecurePaymentRequest
-from utils.security import sql_protection, input_validator
+from middleware.jwt_auth import get_current_user_id
+from utils.input_validator import input_validator
+from utils.structured_logging import log_payment_attempt, track_error
 from jose import jwt, JWTError
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -34,9 +24,8 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
 
-# In-memory payment tracking (in production, use database)
-payment_orders = {}
-payment_tickets = {}
+# Payment tracking now uses database with audit trail
+# Removed in-memory storage for security
 
 def _now_ist_iso():
     return datetime.now(IST).isoformat()

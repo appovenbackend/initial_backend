@@ -11,9 +11,13 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from middleware.security import SecurityHeadersMiddleware, RequestSizeLimitMiddleware, SecurityLoggingMiddleware
+from middleware.jwt_auth import JWTAuthMiddleware
+from middleware.request_tracing import RequestTracingMiddleware
 from core.rate_limiting import limiter
 from routers import auth, events, tickets, payments, social, migration
-from core.config import SECRET_KEY, IST, MAX_REQUEST_SIZE
+from core.secure_config import secure_config, CORS_ORIGINS, MAX_REQUEST_SIZE, IST
+from utils.structured_logging import setup_logging, error_tracker, get_performance_metrics
+from services.notification_service import process_pending_notifications
 from utils.database import read_events, write_events, get_database_session
 from core.config import USE_POSTGRESQL, DATABASE_URL
 from services.cache_service import get_cache, set_cache, is_cache_healthy
@@ -21,15 +25,8 @@ from datetime import datetime, timedelta
 import uvicorn
 import asyncio
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('app.log'),
-        logging.StreamHandler()
-    ]
-)
+# Setup structured logging
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # Rate limiting is handled by core.rate_limiting module
@@ -89,14 +86,20 @@ app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Add session middleware for OAuth
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+app.add_middleware(SessionMiddleware, secret_key=secure_config.jwt_secret)
+
+# Add JWT authentication middleware (replaces insecure X-User-ID header)
+app.add_middleware(JWTAuthMiddleware)
+
+# Add request tracing middleware
+app.add_middleware(RequestTracingMiddleware)
 
 # Include routers with error handling
 try:
@@ -104,6 +107,12 @@ try:
     logger.info("✅ Auth router included successfully")
 except Exception as e:
     logger.error(f"❌ Failed to include auth router: {e}")
+
+try:
+    app.include_router(payments.router)
+    logger.info("✅ Payments router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include payments router: {e}")
 
 try:
     app.include_router(events.router)
@@ -116,12 +125,6 @@ try:
     logger.info("✅ Tickets router included successfully")
 except Exception as e:
     logger.error(f"❌ Failed to include tickets router: {e}")
-
-try:
-    app.include_router(payments.router)
-    logger.info("✅ Payments router included successfully")
-except Exception as e:
-    logger.error(f"❌ Failed to include payments router: {e}")
 
 try:
     app.include_router(social.router)
@@ -306,19 +309,59 @@ async def get_cache_stats(request: Request):
             content={"error": "Failed to get cache stats", "details": str(e)}
         )
 
-@app.post("/cache-clear")
+@app.get("/metrics")
 @limiter.limit("10/minute")
-async def clear_cache(request: Request):
-    """Clear cache (admin endpoint)"""
+async def get_metrics(request: Request):
+    """Get application metrics and performance data"""
     try:
-        from services.cache_service import clear_cache_pattern
-        cleared_count = clear_cache_pattern("*")
-        return {"message": f"Cleared {cleared_count} cache entries"}
+        metrics = get_performance_metrics()
+        error_stats = error_tracker.get_error_stats()
+        
+        return {
+            "performance": metrics,
+            "errors": error_stats,
+            "timestamp": datetime.now(IST).isoformat()
+        }
     except Exception as e:
-        logger.error(f"Cache clear error: {e}")
+        logger.error(f"Failed to get metrics: {e}")
         return JSONResponse(
             status_code=500,
-            content={"error": "Failed to clear cache", "details": str(e)}
+            content={"error": "Failed to get metrics", "details": str(e)}
+        )
+
+@app.get("/errors")
+@limiter.limit("10/minute")
+async def get_recent_errors(request: Request):
+    """Get recent errors (admin endpoint)"""
+    try:
+        recent_errors = error_tracker.get_recent_errors(limit=20)
+        return {
+            "recent_errors": recent_errors,
+            "timestamp": datetime.now(IST).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get recent errors: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to get recent errors", "details": str(e)}
+        )
+
+@app.post("/notifications/process")
+@limiter.limit("5/minute")
+async def process_notifications(request: Request):
+    """Process pending notifications (admin endpoint)"""
+    try:
+        processed_count = process_pending_notifications()
+        return {
+            "message": f"Processed {processed_count} notifications",
+            "processed_count": processed_count,
+            "timestamp": datetime.now(IST).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to process notifications: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to process notifications", "details": str(e)}
         )
 
 if __name__ == "__main__":

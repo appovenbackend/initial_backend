@@ -4,9 +4,11 @@ from uuid import uuid4
 from datetime import datetime, timedelta
 from dateutil import parser
 from core.rate_limiting import api_rate_limit, generous_rate_limit
-from core.rbac import require_role, UserRole, get_current_user_id, get_current_user, require_authenticated
+from core.rbac import require_role, UserRole, require_authenticated
+from middleware.jwt_auth import get_current_user_id
 from models.validation import SecureEventCreate, SecureEventUpdate
-from utils.security import sql_protection, input_validator
+from utils.input_validator import input_validator
+from utils.structured_logging import log_event_creation, track_error
 from models.user import User
 from models.ticket import Ticket
 from models.event import Event
@@ -93,42 +95,70 @@ def _cache_invalidate_events_list():
 @router.post("/", response_model=Event)
 @api_rate_limit("event_creation")
 async def create_event(ev: SecureEventCreate, request: Request):
-    new_ev = Event(
-        id="evt_" + uuid4().hex[:10],
-        title=ev.title,
-        description=ev.description,
-        city=ev.city,
-        venue=ev.venue,
-        startAt=ev.startAt,
-        endAt=ev.endAt,
-        priceINR=ev.priceINR,
-        bannerUrl=ev.bannerUrl,
-        isActive=ev.isActive if ev.isActive is not None else True,
-        createdAt=datetime.now(IST).isoformat(),
-        organizerName=ev.organizerName,
-        organizerLogo=ev.organizerLogo,
-        coordinate_lat=ev.coordinate_lat,
-        coordinate_long=ev.coordinate_long,
-        address_url=ev.address_url,
-        registration_link=ev.registration_link,
-        requires_approval=ev.requires_approval if ev.requires_approval is not None else False
-    ).dict()
-
-    # Save only the new event (write_events now handles upsert)
-    _save_events([new_ev])
-    _cache_invalidate_events_list()
-
-    # Notify all users about new event (best effort; phones must be E.164)
     try:
-        users = read_users()
-        phones = [u.get("phone") for u in users if u.get("phone")]
-        if phones:
-            await send_bulk_text(phones, format_event_announcement(new_ev))
-    except Exception:
-        # Do not block event creation on messaging failures
-        pass
+        # Validate and sanitize input
+        ev.title = input_validator.sanitize_event_title(ev.title)
+        ev.description = input_validator.sanitize_event_description(ev.description)
+        ev.city = input_validator.sanitize_city(ev.city)
+        ev.venue = input_validator.sanitize_venue(ev.venue)
+        ev.priceINR = input_validator.validate_price(ev.priceINR)
+        
+        if ev.bannerUrl:
+            ev.bannerUrl = input_validator.sanitize_url(ev.bannerUrl)
+        if ev.address_url:
+            ev.address_url = input_validator.sanitize_url(ev.address_url)
+        if ev.registration_link:
+            ev.registration_link = input_validator.sanitize_url(ev.registration_link)
+        
+        # Validate datetime
+        ev.startAt = input_validator.validate_datetime(ev.startAt)
+        ev.endAt = input_validator.validate_datetime(ev.endAt)
 
-    return new_ev
+        new_ev = Event(
+            id="evt_" + uuid4().hex[:10],
+            title=ev.title,
+            description=ev.description,
+            city=ev.city,
+            venue=ev.venue,
+            startAt=ev.startAt,
+            endAt=ev.endAt,
+            priceINR=ev.priceINR,
+            bannerUrl=ev.bannerUrl,
+            isActive=ev.isActive if ev.isActive is not None else True,
+            createdAt=datetime.now(IST).isoformat(),
+            organizerName=ev.organizerName,
+            organizerLogo=ev.organizerLogo,
+            coordinate_lat=ev.coordinate_lat,
+            coordinate_long=ev.coordinate_long,
+            address_url=ev.address_url,
+            registration_link=ev.registration_link,
+            requires_approval=ev.requires_approval if ev.requires_approval is not None else False
+        ).dict()
+
+        # Save only the new event (write_events now handles upsert)
+        _save_events([new_ev])
+        _cache_invalidate_events_list()
+
+        # Log event creation
+        log_event_creation(new_ev["id"], "system", new_ev["title"], request)
+
+        # Notify all users about new event (best effort; phones must be E.164)
+        try:
+            users = read_users()
+            phones = [u.get("phone") for u in users if u.get("phone")]
+            if phones:
+                await send_bulk_text(phones, format_event_announcement(new_ev))
+        except Exception as e:
+            # Do not block event creation on messaging failures
+            track_error("notification_failed", str(e), request=request)
+            pass
+
+        return new_ev
+    except HTTPException:
+        raise
+    except Exception as e:
+        track_error("event_creation_failed", str(e), request=request)
+        raise HTTPException(status_code=500, detail=f"Event creation failed: {str(e)}")
 
 @router.get("/", response_model=List[Event])
 @api_rate_limit("public_read")

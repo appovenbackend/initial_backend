@@ -7,10 +7,12 @@ from core.config import IST, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SECRET_KEY,
 from core.security import hash_password, verify_password, create_access_token
 from core.rate_limiting import auth_rate_limit, api_rate_limit
 from core.jwt_security import jwt_security_manager
-from core.rbac import require_authenticated, get_current_user_id
+from middleware.jwt_auth import get_current_user_id
 from models.validation import SecureUserRegister, SecureUserLogin, SecureUserUpdate
 from models.user import User
-from utils.security import sql_protection, input_validator
+from utils.input_validator import input_validator
+from utils.structured_logging import log_user_registration, track_error
+from services.notification_service import send_welcome_notification
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 import os
@@ -41,6 +43,11 @@ def _save_users(data):
 @auth_rate_limit("register")
 async def register(user_register: SecureUserRegister, request: Request):
     try:
+        # Validate and sanitize input
+        user_register.name = input_validator.sanitize_name(user_register.name)
+        user_register.email = input_validator.sanitize_email(user_register.email)
+        user_register.phone = input_validator.sanitize_phone(user_register.phone)
+
         users = _load_users()
 
         # Check if phone number already exists
@@ -85,6 +92,16 @@ async def register(user_register: SecureUserRegister, request: Request):
 
         # Create access token using enhanced JWT security
         access_token = jwt_security_manager.create_token(new_user["id"], {"role": new_user.get("role", "user")})
+
+        # Log user registration
+        log_user_registration(new_user["id"], "email", request)
+
+        # Send welcome notification
+        try:
+            send_welcome_notification(new_user["id"], new_user["name"])
+        except Exception as e:
+            # Don't fail registration if notification fails
+            pass
 
         return {
             "msg": "User registered successfully",
@@ -199,11 +216,69 @@ async def login(user_login: SecureUserLogin, request: Request):
             }
         )
 
-@router.get("/users")
-#@api_rate_limit("admin")
-async def get_all_users(request: Request):
-    users = _load_users()
-    return {"users": users}
+@router.get("/me")
+@api_rate_limit("profile")
+async def get_current_user_profile(request: Request, current_user_id: str = Depends(get_current_user_id)):
+    """Get current user profile (secure endpoint)"""
+    try:
+        users = _load_users()
+        user = next((u for u in users if u["id"] == current_user_id), None)
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return {
+            "id": user["id"],
+            "name": user["name"],
+            "email": user.get("email"),
+            "phone": user.get("phone"),
+            "role": user.get("role", "user"),
+            "bio": user.get("bio"),
+            "picture": user.get("picture"),
+            "strava_link": user.get("strava_link"),
+            "instagram_id": user.get("instagram_id"),
+            "is_private": user.get("is_private", False),
+            "createdAt": user["createdAt"]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        track_error("profile_fetch_failed", str(e), request=request)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch profile: {str(e)}")
+
+@router.get("/admin/users")
+@api_rate_limit("admin")
+async def get_users_admin(request: Request, current_user_id: str = Depends(get_current_user_id)):
+    """Get users list for admin (secure endpoint with role check)"""
+    try:
+        # Check if user is admin
+        users = _load_users()
+        current_user = next((u for u in users if u["id"] == current_user_id), None)
+        if not current_user or current_user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        # Return only safe user data for admin
+        safe_users = []
+        for user in users:
+            safe_users.append({
+                "id": user["id"],
+                "name": user["name"],
+                "email": user.get("email"),
+                "phone": user.get("phone"),
+                "role": user.get("role", "user"),
+                "createdAt": user["createdAt"],
+                "is_private": user.get("is_private", False)
+            })
+        
+        return {
+            "users": safe_users,
+            "total": len(safe_users)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        track_error("admin_users_fetch_failed", str(e), request=request)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch users: {str(e)}")
 
 @router.get("/user/{phone}")
 async def get_user_by_phone(phone: str):
