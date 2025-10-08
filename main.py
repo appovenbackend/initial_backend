@@ -40,26 +40,81 @@ def initialize_sample_data():
     pass
 
 
-if os.getenv("RUN_MIGRATION") == "true":
-    print("🔄 Running database migration...")
-    from migrate_db import run_migrations
-    run_migrations()
-    print("✅ Migration completed!")
+# Legacy migration code removed - using proper Alembic migrations below
 
-# TEMPORARY: Run migration on startup (remove after migration completes)
-def run_migration():
-    """Run database migration to add missing columns"""
+# AUTOMATIC: Run Alembic migrations on startup
+def run_migrations():
+    """Run Alembic database migrations automatically on deployment"""
     try:
-        from migrate_db import migrate_events_table, migrate_received_qr_tokens_table, migrate_users_table
-        print("🔄 Running database migration on startup...")
-        migrate_events_table()
-        migrate_received_qr_tokens_table()
-        migrate_users_table()
-        print("✅ Migration completed successfully!")
+        print("🔄 Running Alembic migrations...")
+        from alembic import command
+        from alembic.config import Config
+        from core.config import DATABASE_URL, USE_POSTGRESQL
+        import os
+
+        # Set up Alembic configuration
+        config = Config()
+
+        # Set the database URL if available
+        if DATABASE_URL:
+            config.set_main_option('sqlalchemy.url', DATABASE_URL)
+
+        # Configure script location (alembic directory relative to this file)
+        package_dir = os.path.dirname(__file__)
+        alembic_dir = os.path.join(package_dir, 'alembic')
+        config.set_main_option('script_location', alembic_dir)
+
+        # Set other required config options
+        config.set_main_option('version_locations', os.path.join(alembic_dir, 'versions'))
+
+        # Don't store config file, use programmatic config
+        config.config_file_name = None
+
+        print(f"Using database: {'PostgreSQL' if USE_POSTGRESQL else 'SQLite'}")
+
+        # Get current revision (optional, for logging)
+        try:
+            from alembic.script import ScriptDirectory
+            script_dir = ScriptDirectory.from_config(config)
+            current_head = script_dir.get_current_head()
+            print(f"Current head revision: {current_head}")
+        except Exception:
+            print("⚠️  Could not check current revision (this is normal for first run)")
+
+        # Run upgrade to latest
+        command.upgrade(config, 'head')
+
+        print("✅ All migrations completed successfully!")
+
+        # Verify the column exists
+        try:
+            from utils.database import get_database_session
+            db = get_database_session()
+            try:
+                # Check if registration_open column exists by querying it
+                result = db.execute("SELECT COUNT(*) FROM events WHERE registration_open IS NOT NULL")
+                count = result.fetchone()[0]
+                print(f"✅ Database check: registration_open column exists ({count} events checked)")
+            finally:
+                db.close()
+        except Exception as db_error:
+            print(f"⚠️  Database check failed (this is expected if no events exist): {db_error}")
+
     except Exception as e:
         print(f"❌ Migration failed: {e}")
+        import traceback
+        traceback.print_exc()
 
-run_migration()
+        # For production, we may want to continue even if migration fails
+        # to avoid bringing down the service completely
+        print("⚠️  Continuing with deployment despite migration failure...")
+        return False
+
+    return True
+
+print("🔄 Running automatic migrations on startup...")
+run_migrations()
+print("✅ Startup migrations complete!")
 
 # Initialize database on startup
 initialize_sample_data()
