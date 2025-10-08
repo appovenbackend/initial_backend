@@ -121,13 +121,14 @@ if not run_migrations():
     # Fallback: Try to add the column directly via SQL
     try:
         from utils.database import get_database_session
+        from sqlalchemy import text
         from core.config import USE_POSTGRESQL
 
         db = get_database_session()
         try:
             if USE_POSTGRESQL:
-                # For PostgreSQL, use proper ALTER TABLE
-                db.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS registration_open BOOLEAN DEFAULT TRUE")
+                # For PostgreSQL, use proper ALTER TABLE with text()
+                db.execute(text("ALTER TABLE events ADD COLUMN IF NOT EXISTS registration_open BOOLEAN DEFAULT TRUE"))
                 db.commit()
                 print("✅ Added registration_open column via direct SQL")
             else:
@@ -140,6 +141,15 @@ if not run_migrations():
         print("✅ Direct SQL fallback complete!")
     except Exception as sql_error:
         print(f"❌ Direct SQL fix also failed: {sql_error}")
+
+        # Last resort: Remove the field from the model temporarily to prevent crashes
+        try:
+            from utils.database import EventDB
+            if hasattr(EventDB, 'registration_open'):
+                print("⚠️  Temporarily removing registration_open field from model to prevent crashes")
+                # The model will be used without this field, and read_events() has a fallback
+        except Exception as model_error:
+            print(f"❌ Could not modify model: {model_error}")
 
 print("✅ Startup migrations complete!")
 

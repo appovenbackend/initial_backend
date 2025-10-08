@@ -89,7 +89,8 @@ class SecureEventUpdate(BaseModel):
     address_url: Optional[str] = Field(None)
     registration_link: Optional[str] = Field(None)
     requires_approval: Optional[bool] = Field(None)
-    registration_open: Optional[bool] = Field(None)
+    # Temporarily disable until migration runs
+    # registration_open: Optional[bool] = Field(None)
 
     @validator('endAt')
     def validate_end_after_start(cls, v, values):
