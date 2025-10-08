@@ -73,23 +73,23 @@ class SecureTicketValidation(BaseModel):
     eventId: str = Field(..., pattern=r'^evt_[a-f0-9]{10}$')
 
 class SecureEventUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=3, max_length=100, pattern=r'^[a-zA-Z0-9\s\-_.,!?]+$')
-    description: Optional[str] = Field(None, min_length=10, max_length=2000)
-    city: Optional[str] = Field(None, min_length=2, max_length=50, pattern=r'^[a-zA-Z\s]+$')
-    venue: Optional[str] = Field(None, min_length=3, max_length=100)
-    startAt: Optional[str] = Field(None, pattern=r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$')
-    endAt: Optional[str] = Field(None, pattern=r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$')
-    priceINR: Optional[int] = Field(None, ge=0, le=100000)
-    bannerUrl: Optional[str] = Field(None, pattern=r'^https?://.+\.(jpg|jpeg|png|gif|webp)$')
-    isActive: Optional[bool] = None
-    organizerName: Optional[str] = Field(None, max_length=50)
-    organizerLogo: Optional[str] = Field(None, pattern=r'^https?://.+\.(jpg|jpeg|png|gif|webp)$')
-    coordinate_lat: Optional[str] = Field(None, pattern=r'^-?\d+\.?\d*$')
-    coordinate_long: Optional[str] = Field(None, pattern=r'^-?\d+\.?\d*$')
-    address_url: Optional[str] = Field(None, pattern=r'^https?://.+')
-    registration_link: Optional[str] = Field(None, pattern=r'^https?://.+')
-    requires_approval: Optional[bool] = None
-    registration_open: Optional[bool] = None
+    title: str = Field(..., min_length=3, max_length=100)
+    description: str = Field(..., min_length=10, max_length=2000)
+    city: str = Field(..., min_length=2, max_length=50)
+    venue: str = Field(..., min_length=3, max_length=100)
+    startAt: str = Field(...)
+    endAt: str = Field(...)
+    priceINR: int = Field(..., ge=0, le=100000)  # 0 to 1 lakh
+    bannerUrl: Optional[str] = Field(None)
+    isActive: Optional[bool] = True
+    organizerName: Optional[str] = Field("bhag", max_length=50)
+    organizerLogo: Optional[str] = Field("https://example.com/default-logo.png")
+    coordinate_lat: Optional[str] = Field(None)
+    coordinate_long: Optional[str] = Field(None)
+    address_url: Optional[str] = Field(None)
+    registration_link: Optional[str] = Field(None)
+    requires_approval: Optional[bool] = False
+    registration_open: Optional[bool] = True
 
 class SecureFreeRegistration(BaseModel):
     phone: str = Field(..., pattern=r'^\+?[1-9]\d{1,14}$')
