@@ -13,6 +13,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from middleware.security import SecurityHeadersMiddleware, RequestSizeLimitMiddleware, SecurityLoggingMiddleware
 from middleware.jwt_auth import JWTAuthMiddleware
 from middleware.request_tracing import RequestTracingMiddleware
+from middleware.error_handler import ErrorHandlingMiddleware
 from core.rate_limiting import limiter
 from routers import auth, events, tickets, payments, social, migration
 from core.secure_config import secure_config, CORS_ORIGINS, MAX_REQUEST_SIZE
@@ -103,6 +104,9 @@ app.add_middleware(SecurityHeadersMiddleware)  # Add security headers
 
 # Add request tracing middleware
 app.add_middleware(RequestTracingMiddleware)
+
+# Add comprehensive error handling middleware
+app.add_middleware(ErrorHandlingMiddleware)
 
 # Include routers with error handling
 try:

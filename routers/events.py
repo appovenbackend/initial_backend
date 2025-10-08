@@ -11,6 +11,14 @@ from models.validation import SecureEventCreate, SecureEventUpdate
 from utils.security import sql_protection
 from utils.input_validator import input_validator
 from utils.structured_logging import log_event_creation, track_error
+from core.exceptions import (
+    EventNotFoundError,
+    EventExpiredError,
+    DuplicateRegistrationError,
+    EventValidationError,
+    DatabaseError,
+    handle_database_error
+)
 from models.user import User
 from models.ticket import Ticket
 from models.event import Event
@@ -255,22 +263,34 @@ async def list_recent_events(request: Request, limit: int = 10):
 @router.get("/{event_id}", response_model=Event)
 @api_rate_limit("public_read")
 async def get_event(event_id: str, request: Request):
-    events = _load_events()
-    e = next((x for x in events if x["id"] == event_id), None)
-    if not e:
-        raise HTTPException(status_code=404, detail="Event not found")
-    # expire check for this event
     try:
-        end = _to_ist(e["endAt"])
-        if end <= _now_ist():
-            e["isActive"] = False
-            _save_events(events)  # Pass all events for update
-            raise HTTPException(status_code=404, detail="Event expired")
-    except HTTPException:
+        events = _load_events()
+        e = next((x for x in events if x["id"] == event_id), None)
+        if not e:
+            raise EventNotFoundError(event_id)
+
+        # expire check for this event
+        try:
+            end = _to_ist(e["endAt"])
+            if end <= _now_ist():
+                e["isActive"] = False
+                _save_events(events)  # Pass all events for update
+                raise EventExpiredError(event_id)
+        except (EventNotFoundError, EventExpiredError):
+            raise
+        except Exception as e:
+            # Log unexpected errors but don't fail the request
+            track_error("event_expiry_check_failed", str(e), request=request)
+
+        return Event(**e)
+    except EventNotFoundError:
         raise
-    except Exception:
-        pass
-    return Event(**e)
+    except EventExpiredError:
+        raise
+    except Exception as e:
+        # Convert unexpected errors to custom exceptions
+        db_error = handle_database_error(e, "get_event")
+        raise db_error
 
 @router.get("/{event_id}/registered_users")
 @api_rate_limit("admin")

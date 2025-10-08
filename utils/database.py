@@ -5,6 +5,12 @@ from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, Da
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import OperationalError, DisconnectionError
+from core.exceptions import (
+    DatabaseError,
+    DatabaseConnectionError,
+    DatabaseTimeoutError,
+    handle_database_error
+)
 from datetime import datetime
 from core.config import (
     DATABASE_URL,
@@ -215,7 +221,7 @@ def get_database_session():
     """Get a database session for manual operations"""
     return SessionLocal()
 
-# Legacy compatibility functions
+# Legacy compatibility functions with enhanced error handling
 @retry_db_operation()
 def read_users():
     db = SessionLocal()
