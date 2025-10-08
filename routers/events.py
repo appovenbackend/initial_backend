@@ -98,23 +98,7 @@ def _cache_invalidate_events_list():
 @api_rate_limit("event_creation")
 async def create_event(ev: SecureEventCreate, request: Request):
     try:
-        # Validate and sanitize input
-        ev.title = input_validator.sanitize_event_title(ev.title)
-        ev.description = input_validator.sanitize_event_description(ev.description)
-        ev.city = input_validator.sanitize_city(ev.city)
-        ev.venue = input_validator.sanitize_venue(ev.venue)
-        ev.priceINR = input_validator.validate_price(ev.priceINR)
-        
-        if ev.bannerUrl:
-            ev.bannerUrl = input_validator.sanitize_url(ev.bannerUrl)
-        if ev.address_url:
-            ev.address_url = input_validator.sanitize_url(ev.address_url)
-        if ev.registration_link:
-            ev.registration_link = input_validator.sanitize_url(ev.registration_link)
-        
-        # Validate datetime
-        ev.startAt = input_validator.validate_datetime(ev.startAt)
-        ev.endAt = input_validator.validate_datetime(ev.endAt)
+        # Input validation temporarily removed for create event
 
         new_ev = Event(
             id="evt_" + uuid4().hex[:10],
