@@ -24,7 +24,8 @@ def test_error_handling():
         response = requests.get(f"{base_url}/events/nonexistent_event_id")
         if response.status_code == 404:
             error_data = response.json()
-            print("✅ Event not found error properly handled"            print(f"   Error Code: {error_data.get('error_code')}")
+            print("✅ Event not found error properly handled")
+            print(f"   Error Code: {error_data.get('error_code')}")
             print(f"   Category: {error_data.get('category')}")
             print(f"   Message: {error_data.get('message')}")
         else:
@@ -53,7 +54,8 @@ def test_error_handling():
         response = requests.post(f"{base_url}/events/", json=event_data)
         if response.status_code == 200:
             event_result = response.json()
-            print("✅ Event creation successful with relaxed validation"            print(f"   Event ID: {event_result.get('id')}")
+            print("✅ Event creation successful with relaxed validation")
+            print(f"   Event ID: {event_result.get('id')}")
             print(f"   Title: {event_result.get('title')}")
 
             # Clean up - delete the test event
@@ -75,7 +77,8 @@ def test_error_handling():
             response = requests.get(f"{base_url}/events/")
             if response.status_code == 429:
                 error_data = response.json()
-                print("✅ Rate limiting working properly"                print(f"   Error Code: {error_data.get('error_code')}")
+                print("✅ Rate limiting working properly")
+                print(f"   Error Code: {error_data.get('error_code')}")
                 print(f"   Category: {error_data.get('category')}")
                 break
         else:
@@ -89,7 +92,8 @@ def test_error_handling():
         response = requests.get(f"{base_url}/health")
         if response.status_code == 200:
             health_data = response.json()
-            print("✅ Health check endpoint working"            print(f"   Status: {health_data.get('status')}")
+            print("✅ Health check endpoint working")
+            print(f"   Status: {health_data.get('status')}")
             print(f"   Database: {health_data.get('database', {}).get('type')}")
         else:
             print(f"❌ Health check failed: {response.status_code}")
@@ -106,7 +110,8 @@ def test_error_handling():
 
             missing_fields = [field for field in required_fields if field not in error_data]
             if not missing_fields:
-                print("✅ Error response format is correct"                print(f"   Error Code: {error_data.get('error_code')}")
+                print("✅ Error response format is correct")
+                print(f"   Error Code: {error_data.get('error_code')}")
                 print(f"   Category: {error_data.get('category')}")
                 print(f"   Severity: {error_data.get('severity')}")
                 print(f"   Request ID: {error_data.get('request_id')}")

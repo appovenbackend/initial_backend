@@ -32,11 +32,7 @@ from services.qr_service import create_qr_token
 from typing import List
 from time import time
 from services.cache_service import get_cache, set_cache, delete_cache
-from services.whatsapp_service import (
-    send_bulk_text,
-    format_event_announcement,
-    format_event_update,
-)
+# WhatsApp functionality removed
 from services.featured_events_service import (
     get_featured_events,
     set_featured_events,
@@ -137,16 +133,7 @@ async def create_event(ev: SecureEventCreate, request: Request):
         # Log event creation
         log_event_creation(new_ev["id"], "system", new_ev["title"], request)
 
-        # Notify all users about new event (best effort; phones must be E.164)
-        try:
-            users = read_users()
-            phones = [u.get("phone") for u in users if u.get("phone")]
-            if phones:
-                await send_bulk_text(phones, format_event_announcement(new_ev))
-        except Exception as e:
-            # Do not block event creation on messaging failures
-            track_error("notification_failed", str(e), request=request)
-            pass
+        # WhatsApp notifications removed
 
         return new_ev
     except HTTPException:
@@ -396,19 +383,7 @@ async def update_event_partial(event_id: str, event_updates: SecureEventUpdate, 
     _save_events(events)  # Pass all events for update
     _cache_invalidate_events_list()
 
-    # Notify subscribed users about update (best effort)
-    try:
-        # Subscribers are users whose subscribedEvents contains event_id
-        users = read_users()
-        subscriber_phones = [
-            u.get("phone")
-            for u in users
-            if u.get("phone") and event_id in (u.get("subscribedEvents") or [])
-        ]
-        if subscriber_phones:
-            await send_bulk_text(subscriber_phones, format_event_update(updated_event, list(sanitized_updates.keys())))
-    except Exception:
-        pass
+    # WhatsApp notifications removed
 
     # Return the updated event
     return {

@@ -17,7 +17,7 @@ from utils.database import (
 )
 from core.config import IST
 import json
-from services.whatsapp_service import send_bulk_text
+# WhatsApp functionality removed
 
 router = APIRouter(prefix="/social", tags=["Social"])
 
@@ -467,32 +467,7 @@ async def get_activity_feed(
         "total": len(followed_events)
     }
 
-# Admin messaging endpoints (no-op if WhatsApp not configured)
-@router.post("/admin/notify/all")
-@require_role(UserRole.ADMIN)
-async def admin_notify_all_users(message: str):
-    users = _load_users()
-    phones = [u.get("phone") for u in users if u.get("phone")]
-    if not phones:
-        return {"sent": 0, "message": "No users with phone numbers"}
-    results = await send_bulk_text(phones, message)
-    sent = sum(1 for ok in results.values() if ok)
-    return {"sent": sent, "total": len(phones)}
-
-@router.post("/admin/notify/event/{event_id}")
-@require_role(UserRole.ADMIN)
-async def admin_notify_event_subscribers(event_id: str, message: str):
-    users = _load_users()
-    phones = [
-        u.get("phone")
-        for u in users
-        if u.get("phone") and event_id in (u.get("subscribedEvents") or [])
-    ]
-    if not phones:
-        return {"sent": 0, "message": "No subscribers with phone numbers"}
-    results = await send_bulk_text(phones, message)
-    sent = sum(1 for ok in results.values() if ok)
-    return {"sent": sent, "total": len(phones)}
+# WhatsApp admin messaging endpoints removed
 
 @router.get("/users/search")
 @api_rate_limit("social_operations")

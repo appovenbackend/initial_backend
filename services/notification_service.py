@@ -38,7 +38,6 @@ class NotificationChannel(str, Enum):
     EMAIL = "email"
     SMS = "sms"
     PUSH = "push"
-    WHATSAPP = "whatsapp"
     IN_APP = "in_app"
 
 class NotificationStatus(str, Enum):
@@ -124,15 +123,7 @@ class NotificationService:
                 "message_template": "Hi {user_name}, your payment of ₹{amount} for {event_title} has been processed successfully. Your ticket is confirmed!",
                 "variables": json.dumps(["user_name", "amount", "event_title"])
             },
-            {
-                "template_name": "ticket_confirmed_whatsapp",
-                "notification_type": NotificationType.TICKET_CONFIRMED,
-                "channel": NotificationChannel.WHATSAPP,
-                "subject": None,
-                "title": "Ticket Confirmed",
-                "message_template": "🎉 *Ticket Confirmed!*\n\nHi {user_name},\n\nYour ticket for *{event_title}* has been confirmed!\n\n📅 *Date:* {event_date}\n🕐 *Time:* {event_time}\n📍 *Venue:* {venue}\n\nYour QR code will be sent separately for event entry.\n\nSee you at the event! 🎊",
-                "variables": json.dumps(["user_name", "event_title", "event_date", "event_time", "venue"])
-            },
+
             {
                 "template_name": "user_welcome_email",
                 "notification_type": NotificationType.USER_WELCOME,
@@ -287,29 +278,16 @@ class NotificationService:
                 "amount": payment_data["amount"],
                 "event_title": payment_data["event_title"]
             }
-            
+
             # Send SMS notification
             sms_id = self.send_notification_from_template(
                 user_id=user_id,
                 template_name="payment_success_sms",
                 variables=variables
             )
-            
-            # Send WhatsApp notification
-            whatsapp_id = self.send_notification_from_template(
-                user_id=user_id,
-                template_name="ticket_confirmed_whatsapp",
-                variables={
-                    "user_name": payment_data.get("user_name", "User"),
-                    "event_title": payment_data["event_title"],
-                    "event_date": payment_data.get("event_date", "Check event details"),
-                    "event_time": payment_data.get("event_time", "Check event details"),
-                    "venue": payment_data.get("venue", "Check event details")
-                }
-            )
-            
-            return f"{sms_id},{whatsapp_id}"
-            
+
+            return sms_id
+
         except Exception as e:
             logger.error(f"Failed to send payment confirmation: {e}")
             raise
@@ -377,14 +355,12 @@ class NotificationService:
                 return self._send_email(notification)
             elif notification.channel == NotificationChannel.SMS:
                 return self._send_sms(notification)
-            elif notification.channel == NotificationChannel.WHATSAPP:
-                return self._send_whatsapp(notification)
             elif notification.channel == NotificationChannel.IN_APP:
                 return self._send_in_app(notification)
             else:
                 logger.error(f"Unsupported notification channel: {notification.channel}")
                 return False
-                
+
         except Exception as e:
             logger.error(f"Failed to send notification {notification.id}: {e}")
             return False
@@ -401,11 +377,7 @@ class NotificationService:
         logger.info(f"SMS notification sent: {notification.id}")
         return True
     
-    def _send_whatsapp(self, notification: NotificationDB) -> bool:
-        """Send WhatsApp notification (placeholder implementation)"""
-        # TODO: Implement actual WhatsApp sending (e.g., using WhatsApp Business API)
-        logger.info(f"WhatsApp notification sent: {notification.id}")
-        return True
+
     
     def _send_in_app(self, notification: NotificationDB) -> bool:
         """Send in-app notification"""

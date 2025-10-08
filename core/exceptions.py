@@ -189,11 +189,7 @@ class ExternalAPIError(BaseCustomException):
             **kwargs
         )
 
-class WhatsAppAPIError(ExternalAPIError):
-    """Raised when WhatsApp API calls fail"""
-    def __init__(self, message: str = "WhatsApp notification failed", **kwargs):
-        super().__init__(message, service="whatsapp", **kwargs)
-        self.error_code = "WHATSAPP_001"
+# WhatsApp exception removed
 
 # Business Logic Errors
 class BusinessLogicError(BaseCustomException):

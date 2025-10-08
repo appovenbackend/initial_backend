@@ -196,7 +196,7 @@ LOG_FORMAT=json
 NOTIFICATION_ENABLED=true
 EMAIL_SERVICE_URL=your_email_service_url
 SMS_SERVICE_URL=your_sms_service_url
-WHATSAPP_SERVICE_URL=your_whatsapp_service_url
+# WhatsApp service removed
 
 # Monitoring Configuration
 MONITORING_ENABLED=true
