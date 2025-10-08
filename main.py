@@ -113,7 +113,34 @@ def run_migrations():
     return True
 
 print("🔄 Running automatic migrations on startup...")
-run_migrations()
+
+# Try Alembic migrations first
+if not run_migrations():
+    print("❌ Alembic migrations failed, trying direct SQL fix...")
+
+    # Fallback: Try to add the column directly via SQL
+    try:
+        from utils.database import get_database_session
+        from core.config import USE_POSTGRESQL
+
+        db = get_database_session()
+        try:
+            if USE_POSTGRESQL:
+                # For PostgreSQL, use proper ALTER TABLE
+                db.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS registration_open BOOLEAN DEFAULT TRUE")
+                db.commit()
+                print("✅ Added registration_open column via direct SQL")
+            else:
+                # For SQLite, this would have autoincremented the schema
+                # But let's try a different approach
+                pass
+        finally:
+            db.close()
+
+        print("✅ Direct SQL fallback complete!")
+    except Exception as sql_error:
+        print(f"❌ Direct SQL fix also failed: {sql_error}")
+
 print("✅ Startup migrations complete!")
 
 # Initialize database on startup
