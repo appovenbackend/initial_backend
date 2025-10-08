@@ -10,21 +10,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 class SecureEventCreate(BaseModel):
-    title: str = Field(..., min_length=3, max_length=100, pattern=r'^[a-zA-Z0-9\s\-_.,!?]+$')
+    title: str = Field(..., min_length=3, max_length=100)
     description: str = Field(..., min_length=10, max_length=2000)
-    city: str = Field(..., min_length=2, max_length=50, pattern=r'^[a-zA-Z\s]+$')
+    city: str = Field(..., min_length=2, max_length=50)
     venue: str = Field(..., min_length=3, max_length=100)
-    startAt: str = Field(..., pattern=r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}')
-    endAt: str = Field(..., pattern=r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}')
+    startAt: str = Field(...)
+    endAt: str = Field(...)
     priceINR: int = Field(..., ge=0, le=100000)  # 0 to 1 lakh
-    bannerUrl: Optional[str] = Field(None, pattern=r'^https?://.+\.(jpg|jpeg|png|gif|webp)$')
+    bannerUrl: Optional[str] = Field(None)
     isActive: Optional[bool] = True
     organizerName: Optional[str] = Field("bhag", max_length=50)
-    organizerLogo: Optional[str] = Field("https://example.com/default-logo.png", pattern=r'^https?://.+\.(jpg|jpeg|png|gif|webp)$')
-    coordinate_lat: Optional[str] = Field(None, pattern=r'^-?\d+\.?\d*$')
-    coordinate_long: Optional[str] = Field(None, pattern=r'^-?\d+\.?\d*$')
-    address_url: Optional[str] = Field(None, pattern=r'^https?://.+')
-    registration_link: Optional[str] = Field(None, pattern=r'^https?://.+')
+    organizerLogo: Optional[str] = Field("https://example.com/default-logo.png")
+    coordinate_lat: Optional[str] = Field(None)
+    coordinate_long: Optional[str] = Field(None)
+    address_url: Optional[str] = Field(None)
+    registration_link: Optional[str] = Field(None)
     requires_approval: Optional[bool] = False
     registration_open: Optional[bool] = True
     
