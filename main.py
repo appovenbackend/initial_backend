@@ -15,7 +15,7 @@ from middleware.jwt_auth import JWTAuthMiddleware
 from middleware.request_tracing import RequestTracingMiddleware
 from middleware.error_handler import ErrorHandlingMiddleware
 from core.rate_limiting import limiter
-from routers import auth, events, tickets, payments, social, migration
+from routers import auth, events, tickets, payments, social, migration, admin
 from core.secure_config import secure_config, CORS_ORIGINS, MAX_REQUEST_SIZE
 from core.config import IST
 from utils.structured_logging import setup_logging, error_tracker, get_performance_metrics
@@ -144,6 +144,12 @@ try:
     logger.info("✅ Migration router included successfully")
 except Exception as e:
     logger.error(f"❌ Failed to include migration router: {e}")
+
+try:
+    app.include_router(admin.router)
+    logger.info("✅ Admin router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include admin router: {e}")
 
 # Ensure uploads directory exists
 os.makedirs("uploads", exist_ok=True)

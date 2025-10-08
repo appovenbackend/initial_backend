@@ -642,6 +642,55 @@ def award_points_to_user(user_id: str, points: int, reason: str):
     finally:
         SessionLocal.remove()
 
+def deduct_points_from_user(user_id: str, points: int, reason: str, admin_id: str = None):
+    """Deduct points from a user and record the transaction"""
+    db = SessionLocal()
+    try:
+        with db.begin():
+            # Get or create user points
+            user_points = db.query(UserPointsDB).filter(UserPointsDB.id == user_id).first()
+
+            from datetime import datetime
+            from core.config import IST
+            timestamp = datetime.now(IST).isoformat()
+
+            transaction = {
+                "type": "deducted",
+                "points": -points,  # Negative for deduction
+                "reason": reason,
+                "admin_id": admin_id,
+                "timestamp": timestamp
+            }
+
+            if user_points:
+                # Check if user has enough points
+                if user_points.total_points < points:
+                    return False, f"Insufficient points. User has {user_points.total_points} points, trying to deduct {points}."
+
+                # Update existing
+                user_points.total_points -= points
+                current_history = []
+                if USE_POSTGRESQL and user_points.transaction_history:
+                    try:
+                        current_history = json.loads(user_points.transaction_history)
+                    except:
+                        current_history = []
+                elif user_points.transaction_history:
+                    current_history = user_points.transaction_history
+
+                current_history.append(transaction)
+                user_points.transaction_history = json.dumps(current_history) if USE_POSTGRESQL else current_history
+            else:
+                return False, "User has no points record"
+
+        return True, "Points deducted successfully"
+    except Exception as e:
+        error_msg = f"Error deducting points: {e}"
+        print(error_msg)
+        return False, error_msg
+    finally:
+        SessionLocal.remove()
+
 def read_event_join_requests():
     """Read all event join requests"""
     db = SessionLocal()
