@@ -113,8 +113,7 @@ class EventDB(Base):
     address_url = Column(String, nullable=True)
     registration_link = Column(String, nullable=True)
     requires_approval = Column(Boolean, default=False, index=True)
-    # Temporarily disable registration_open until migration runs
-    # registration_open = Column(Boolean, default=True)
+    registration_open = Column(Boolean, default=True)
 
 class TicketDB(Base):
     __tablename__ = "tickets"

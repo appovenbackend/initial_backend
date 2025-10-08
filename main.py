@@ -124,6 +124,9 @@ if not run_migrations():
         from sqlalchemy import text
         from core.config import USE_POSTGRESQL
 
+        # Import text here in case it's needed
+        from sqlalchemy import text
+
         db = get_database_session()
         try:
             if USE_POSTGRESQL:
