@@ -113,6 +113,7 @@ class EventDB(Base):
     address_url = Column(String, nullable=True)
     registration_link = Column(String, nullable=True)
     requires_approval = Column(Boolean, default=False, index=True)
+    registration_open = Column(Boolean, default=True)
 
 class TicketDB(Base):
     __tablename__ = "tickets"
@@ -302,6 +303,11 @@ def read_events():
             # Default to False for existing events
             if 'requires_approval' not in event_dict:
                 event_dict['requires_approval'] = False
+
+            # Handle missing registration_open column for backward compatibility
+            # Default to True for existing events
+            if 'registration_open' not in event_dict:
+                event_dict['registration_open'] = True
 
             result.append(event_dict)
         return result
