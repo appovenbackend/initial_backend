@@ -73,23 +73,38 @@ class SecureTicketValidation(BaseModel):
     eventId: str = Field(..., pattern=r'^evt_[a-f0-9]{10}$')
 
 class SecureEventUpdate(BaseModel):
-    title: str = Field(..., min_length=3, max_length=100)
-    description: str = Field(..., min_length=10, max_length=2000)
-    city: str = Field(..., min_length=2, max_length=50)
-    venue: str = Field(..., min_length=3, max_length=100)
-    startAt: str = Field(...)
-    endAt: str = Field(...)
-    priceINR: int = Field(..., ge=0, le=100000)  # 0 to 1 lakh
+    title: Optional[str] = Field(None, min_length=3, max_length=100)
+    description: Optional[str] = Field(None, min_length=10, max_length=2000)
+    city: Optional[str] = Field(None, min_length=2, max_length=50)
+    venue: Optional[str] = Field(None, min_length=3, max_length=100)
+    startAt: Optional[str] = Field(None)
+    endAt: Optional[str] = Field(None)
+    priceINR: Optional[int] = Field(None, ge=0, le=100000)  # 0 to 1 lakh
     bannerUrl: Optional[str] = Field(None)
-    isActive: Optional[bool] = True
-    organizerName: Optional[str] = Field("bhag", max_length=50)
-    organizerLogo: Optional[str] = Field("https://example.com/default-logo.png")
+    isActive: Optional[bool] = Field(None)
+    organizerName: Optional[str] = Field(None, max_length=50)
+    organizerLogo: Optional[str] = Field(None)
     coordinate_lat: Optional[str] = Field(None)
     coordinate_long: Optional[str] = Field(None)
     address_url: Optional[str] = Field(None)
     registration_link: Optional[str] = Field(None)
-    requires_approval: Optional[bool] = False
-    registration_open: Optional[bool] = True
+    requires_approval: Optional[bool] = Field(None)
+    registration_open: Optional[bool] = Field(None)
+
+    @validator('endAt')
+    def validate_end_after_start(cls, v, values):
+        if 'startAt' in values and values['startAt'] and v:
+            try:
+                start = datetime.fromisoformat(values['startAt'])
+                end = datetime.fromisoformat(v)
+                if end <= start:
+                    raise ValueError('End time must be after start time')
+            except ValueError as e:
+                if "End time must be after start time" in str(e):
+                    raise e
+                # If datetime parsing fails, let Pydantic handle it
+                pass
+        return v
 
 class SecureFreeRegistration(BaseModel):
     phone: str = Field(..., pattern=r'^\+?[1-9]\d{1,14}$')

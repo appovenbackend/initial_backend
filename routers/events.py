@@ -365,7 +365,7 @@ async def update_event_partial(event_id: str, event_updates: SecureEventUpdate, 
     updated_event = existing_event.copy()
 
     # Convert Pydantic model to dict and update only provided fields
-    event_updates_dict = event_updates.dict(exclude_unset=True)
+    event_updates_dict = event_updates.model_dump(exclude_unset=True)
 
     # Sanitize input data
     sanitized_updates = sql_protection.validate_input(event_updates_dict)
