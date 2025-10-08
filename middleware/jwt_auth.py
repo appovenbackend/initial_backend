@@ -27,7 +27,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         self.exempt_paths = exempt_paths or [
             "/",
             "/docs",
-            "/redoc", 
+            "/redoc",
             "/openapi.json",
             "/test",
             "/openapi-test",
@@ -41,6 +41,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             "/auth/reset-password",
             "/payments/webhook",
             "/uploads/",
+            "/events/",  # Public event listing and details
         ]
     
     async def dispatch(self, request: Request, call_next):
@@ -58,17 +59,31 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             # Extract JWT token from Authorization header
             auth_header = request.headers.get("Authorization")
             if not auth_header:
-                logger.warning(f"No Authorization header for {request.method} {request.url.path} from {request.client.host}")
+                # Safe access to request attributes
+                try:
+                    method = request.method
+                    path = request.url.path
+                    client_host = getattr(request.client, 'host', 'unknown')
+                except:
+                    method = 'UNKNOWN'
+                    path = 'UNKNOWN'
+                    client_host = 'unknown'
+
+                logger.warning(f"No Authorization header for {method} {path} from {client_host}")
                 return self._unauthorized_response("Missing Authorization header", request_id)
 
             # Parse Bearer token
             try:
                 scheme, token = auth_header.split(" ", 1)
                 if scheme.lower() != "bearer":
-                    logger.warning(f"Invalid auth scheme '{scheme}' for {request.method} {request.url.path}")
+                    method = getattr(request, 'method', 'UNKNOWN')
+                    path = getattr(getattr(request, 'url', None), 'path', 'UNKNOWN') if hasattr(request, 'url') else 'UNKNOWN'
+                    logger.warning(f"Invalid auth scheme '{scheme}' for {method} {path}")
                     return self._unauthorized_response("Invalid authorization scheme. Expected 'Bearer'", request_id)
             except ValueError:
-                logger.warning(f"Malformed auth header '{auth_header}' for {request.method} {request.url.path}")
+                method = getattr(request, 'method', 'UNKNOWN')
+                path = getattr(getattr(request, 'url', None), 'path', 'UNKNOWN') if hasattr(request, 'url') else 'UNKNOWN'
+                logger.warning(f"Malformed auth header '{auth_header}' for {method} {path}")
                 return self._unauthorized_response("Invalid authorization header format. Expected 'Bearer <token>'", request_id)
 
             # Validate JWT token
@@ -77,7 +92,9 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
                 user_id = payload.get("sub")
 
                 if not user_id:
-                    logger.warning(f"No user_id in token payload for {request.method} {request.url.path}")
+                    method = getattr(request, 'method', 'UNKNOWN')
+                    path = getattr(getattr(request, 'url', None), 'path', 'UNKNOWN') if hasattr(request, 'url') else 'UNKNOWN'
+                    logger.warning(f"No user_id in token payload for {method} {path}")
                     return self._unauthorized_response("Invalid token payload - missing user ID", request_id)
 
                 # Set user context in request state (CRITICAL FIX)
@@ -85,17 +102,23 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
                 request.state.user_role = payload.get("role", "user")
                 request.state.jwt_payload = payload
 
-                logger.info(f"✅ Authenticated user {user_id} for {request.method} {request.url.path}")
+                logger.info(f"✅ Authenticated user {user_id} for {method} {path}")
                 logger.info(f"✅ Set request.state.user_id = {user_id}")
 
             except HTTPException as e:
-                logger.warning(f"JWT validation failed for {request.method} {request.url.path}: {e.detail}")
+                method = getattr(request, 'method', 'UNKNOWN')
+                path = getattr(getattr(request, 'url', None), 'path', 'UNKNOWN') if hasattr(request, 'url') else 'UNKNOWN'
+                logger.warning(f"JWT validation failed for {method} {path}: {e.detail}")
                 return self._unauthorized_response(e.detail, request_id)
             except JWTError as e:
-                logger.warning(f"JWT decode error for {request.method} {request.url.path}: {str(e)}")
+                method = getattr(request, 'method', 'UNKNOWN')
+                path = getattr(getattr(request, 'url', None), 'path', 'UNKNOWN') if hasattr(request, 'url') else 'UNKNOWN'
+                logger.warning(f"JWT decode error for {method} {path}: {str(e)}")
                 return self._unauthorized_response("Invalid or expired token", request_id)
             except Exception as e:
-                logger.error(f"Unexpected JWT error for {request.method} {request.url.path}: {str(e)}")
+                method = getattr(request, 'method', 'UNKNOWN')
+                path = getattr(getattr(request, 'url', None), 'path', 'UNKNOWN') if hasattr(request, 'url') else 'UNKNOWN'
+                logger.error(f"Unexpected JWT error for {method} {path}: {str(e)}")
                 logger.error(f"Exception type: {type(e).__name__}")
                 return self._unauthorized_response("Authentication error", request_id)
 
@@ -107,12 +130,26 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             return response
 
         except Exception as e:
-            logger.error(f"JWT middleware error for {request.method} {request.url.path}: {str(e)}")
+            # Get request_id safely, with fallback
+            try:
+                request_id = getattr(request.state, 'request_id', 'unknown')
+            except:
+                request_id = 'unknown'
+
+            # Get method and path safely
+            try:
+                method = request.method
+                path = request.url.path
+            except:
+                method = 'UNKNOWN'
+                path = 'UNKNOWN'
+
+            logger.error(f"JWT middleware error for {method} {path}: {str(e)}", exc_info=True)
             return JSONResponse(
                 status_code=500,
                 content={
                     "error": "Authentication middleware error",
-                    "request_id": getattr(request.state, 'request_id', 'unknown'),
+                    "request_id": request_id,
                     "timestamp": datetime.now(IST).isoformat()
                 }
             )
