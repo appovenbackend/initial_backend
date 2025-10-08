@@ -110,7 +110,7 @@ async def deduct_user_points(
             "points_deducted",
             f"Admin deducted {request_data.points} points from user {request_data.user_id}",
             request=request,
-            extra_data={
+            context={
                 "admin_id": admin_id,
                 "target_user_id": request_data.user_id,
                 "points_deducted": request_data.points,
@@ -193,7 +193,7 @@ async def award_user_points(
             "points_awarded",
             f"Admin awarded {request_data.points} points to user {request_data.user_id}",
             request=request,
-            extra_data={
+            context={
                 "admin_id": admin_id,
                 "target_user_id": request_data.user_id,
                 "points_awarded": request_data.points,
@@ -389,7 +389,7 @@ async def lookup_user_by_qr(
             "user_qr_lookup",
             f"Admin looked up user {user_id}",
             request=request,
-            extra_data={
+            context={
                 "admin_id": admin_id,
                 "target_user_id": user_id,
                 "user_name": user.get("name")
