@@ -471,7 +471,8 @@ async def get_activity_feed(
 @api_rate_limit("social_operations")
 async def are_connected(
     user_id_1: str,
-    user_id_2: str
+    user_id_2: str,
+    request: Request
 ):
     """Check if two users are connected (have an accepted connection in either direction)"""
     if not user_id_1 or not user_id_2:
