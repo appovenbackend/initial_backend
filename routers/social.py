@@ -13,7 +13,7 @@ from models.user_follow import (
 )
 from utils.database import (
     read_users, write_users, read_user_follows, write_user_follows,
-    read_events, read_tickets
+    read_events, read_tickets, are_connected as db_are_connected
 )
 from core.config import IST
 import json
@@ -466,6 +466,29 @@ async def get_activity_feed(
         "activities": followed_events[:limit],
         "total": len(followed_events)
     }
+
+@router.get("/users/are-connected")
+@api_rate_limit("social_operations")
+async def are_connected(
+    user_id_1: str,
+    user_id_2: str
+):
+    """Check if two users are connected (have an accepted connection in either direction)"""
+    if not user_id_1 or not user_id_2:
+        return {"connected": False, "message": "Invalid user IDs"}
+
+    if user_id_1 == user_id_2:
+        return {"connected": False, "message": "Cannot check connection to self"}
+
+    try:
+        connected = db_are_connected(user_id_1, user_id_2)
+        return {
+            "connected": connected,
+            "user_id_1": user_id_1,
+            "user_id_2": user_id_2
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error checking connection: {str(e)}")
 
 # WhatsApp admin messaging endpoints removed
 

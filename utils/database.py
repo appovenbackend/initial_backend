@@ -844,6 +844,30 @@ def get_event_join_requests_by_user(user_id: str):
     finally:
         SessionLocal.remove()
 
+def are_connected(user_id_1: str, user_id_2: str) -> bool:
+    """
+    Check if two users are connected (have an accepted connection in either direction).
+    Returns True if connected, False otherwise.
+    """
+    if not user_id_1 or not user_id_2 or user_id_1 == user_id_2:
+        return False
+
+    db = SessionLocal()
+    try:
+        # Check for accepted connection in either direction
+        connection = db.query(UserFollowDB).filter(
+            UserFollowDB.status == 'accepted',
+            (
+                ((UserFollowDB.follower_id == user_id_1) & (UserFollowDB.following_id == user_id_2)) |
+                ((UserFollowDB.follower_id == user_id_2) & (UserFollowDB.following_id == user_id_1))
+            )
+        ).first()
+
+        return connection is not None
+    finally:
+        SessionLocal.remove()
+
+
 # Initialize database on import
 try:
     init_db()
