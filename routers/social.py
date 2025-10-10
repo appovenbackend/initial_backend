@@ -143,7 +143,12 @@ async def get_user_profile(
     users = _load_users()
     user = next((u for u in users if u['id'] == user_id), None)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        from core.exceptions import BusinessLogicError
+        error = BusinessLogicError(
+            message="User not found",
+            user_message="Please log in to access social features"
+        )
+        raise error
 
     follows = _load_user_follows()
     return _build_profile_response(user, current_user_id, follows)

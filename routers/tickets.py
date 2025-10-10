@@ -120,7 +120,12 @@ async def register_free(payload: SecureFreeRegistration, request: Request):
     users = _load_users()
     user = next((u for u in users if u["phone"] == phone), None)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        from core.exceptions import BusinessLogicError
+        error = BusinessLogicError(
+            message="User not found",
+            user_message="Please log in to register for events"
+        )
+        raise error
     userId = user["id"]
 
     # Check if user has already subscribed to this event
