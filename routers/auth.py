@@ -18,8 +18,11 @@ from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 import os
 import shutil
+import logging
 from pathlib import Path
 from jose import jwt
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -422,23 +425,132 @@ async def update_user(
         updated = True
 
     if picture is not None:
-        # Create uploads directory if it doesn't exist
-        upload_dir = Path("uploads/profiles")
-        upload_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            # Validate file object
+            if not picture.file:
+                logger.error(f"Invalid file object for user {user_id}")
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "error": "INVALID_FILE",
+                        "message": "Invalid file uploaded.",
+                        "code": "AUTH_017",
+                        "timestamp": datetime.now(IST).isoformat()
+                    }
+                )
 
-        # Generate unique filename with security validation
-        file_extension = Path(picture.filename).suffix
-        sanitized_filename = input_validator.sanitize_filename(picture.filename)
-        unique_filename = f"{user_id}_{uuid4().hex[:8]}{file_extension}"
-        file_path = upload_dir / unique_filename
+            # Validate file size (max 5MB)
+            file_size = 0
+            picture.file.seek(0, 2)  # Seek to end
+            file_size = picture.file.tell()
+            picture.file.seek(0)  # Reset to beginning
 
-        # Save the uploaded file
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(picture.file, buffer)
+            if file_size > 5 * 1024 * 1024:  # 5MB limit
+                logger.error(f"File too large for user {user_id}: {file_size} bytes")
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "error": "FILE_TOO_LARGE",
+                        "message": "File size exceeds 5MB limit.",
+                        "code": "AUTH_018",
+                        "timestamp": datetime.now(IST).isoformat()
+                    }
+                )
 
-        # Store the relative path in user record
-        user["picture"] = f"/uploads/profiles/{unique_filename}"
-        updated = True
+            # Validate file extension
+            allowed_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+            file_extension = Path(picture.filename).suffix.lower()
+
+            if file_extension not in allowed_extensions:
+                logger.error(f"Invalid file type for user {user_id}: {file_extension}")
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "error": "INVALID_FILE_TYPE",
+                        "message": f"File type {file_extension} not allowed. Allowed types: {', '.join(allowed_extensions)}",
+                        "code": "AUTH_019",
+                        "timestamp": datetime.now(IST).isoformat()
+                    }
+                )
+
+            # Create uploads directory if it doesn't exist
+            upload_dir = Path("uploads/profiles")
+            try:
+                upload_dir.mkdir(parents=True, exist_ok=True)
+                logger.info(f"Upload directory ready: {upload_dir}")
+            except Exception as dir_error:
+                logger.error(f"Failed to create upload directory for user {user_id}: {dir_error}")
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "error": "UPLOAD_DIR_ERROR",
+                        "message": "Failed to create upload directory.",
+                        "code": "AUTH_020",
+                        "timestamp": datetime.now(IST).isoformat()
+                    }
+                )
+
+            # Generate unique filename with security validation
+            sanitized_filename = input_validator.sanitize_filename(picture.filename)
+            unique_filename = f"{user_id}_{uuid4().hex[:8]}{file_extension}"
+            file_path = upload_dir / unique_filename
+
+            logger.info(f"Attempting to save file for user {user_id}: {file_path}")
+
+            # Save the uploaded file with error handling
+            try:
+                bytes_written = 0
+                with open(file_path, "wb") as buffer:
+                    chunk = picture.file.read(8192)  # Read in 8KB chunks
+                    while chunk:
+                        buffer.write(chunk)
+                        bytes_written += len(chunk)
+                        chunk = picture.file.read(8192)
+
+                logger.info(f"Successfully saved file for user {user_id}: {unique_filename} ({bytes_written} bytes)")
+
+                # Verify file was actually written
+                if not file_path.exists() or file_path.stat().st_size == 0:
+                    logger.error(f"File verification failed for user {user_id}: {unique_filename}")
+                    return JSONResponse(
+                        status_code=500,
+                        content={
+                            "error": "FILE_SAVE_ERROR",
+                            "message": "Failed to save file to disk.",
+                            "code": "AUTH_021",
+                            "timestamp": datetime.now(IST).isoformat()
+                        }
+                    )
+
+                # Store the relative path in user record
+                user["picture"] = f"/uploads/profiles/{unique_filename}"
+                updated = True
+
+                logger.info(f"Profile picture updated for user {user_id}: {unique_filename}")
+
+            except Exception as file_error:
+                logger.error(f"Failed to save file for user {user_id}: {file_error}")
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "error": "FILE_WRITE_ERROR",
+                        "message": "Failed to write file to disk.",
+                        "code": "AUTH_022",
+                        "timestamp": datetime.now(IST).isoformat()
+                    }
+                )
+
+        except Exception as upload_error:
+            logger.error(f"Unexpected error during file upload for user {user_id}: {upload_error}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "error": "UPLOAD_ERROR",
+                    "message": "Unexpected error during file upload.",
+                    "code": "AUTH_023",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
 
     if not updated:
         return JSONResponse(
@@ -563,3 +675,79 @@ async def get_user_points(request: Request, current_user_id: str = Depends(get_c
         "total_points": points_data["total_points"],
         "point_history": points_data["transaction_history"]
     }
+
+@router.post("/test-upload")
+@api_rate_limit("authenticated")
+async def test_file_upload(
+    picture: UploadFile = File(...),
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """Test endpoint to verify file upload functionality"""
+    try:
+        logger.info(f"Test upload initiated for user {current_user_id}")
+
+        # Validate file object
+        if not picture.file:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid file object"}
+            )
+
+        # Get file size
+        picture.file.seek(0, 2)
+        file_size = picture.file.tell()
+        picture.file.seek(0)
+
+        logger.info(f"Test upload file size: {file_size} bytes")
+
+        # Create uploads directory if it doesn't exist
+        upload_dir = Path("uploads/profiles")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate test filename
+        file_extension = Path(picture.filename).suffix
+        test_filename = f"test_{current_user_id}_{uuid4().hex[:8]}{file_extension}"
+        file_path = upload_dir / test_filename
+
+        # Save the file
+        bytes_written = 0
+        with open(file_path, "wb") as buffer:
+            chunk = picture.file.read(8192)
+            while chunk:
+                buffer.write(chunk)
+                bytes_written += len(chunk)
+                chunk = picture.file.read(8192)
+
+        # Verify file was written
+        if file_path.exists() and file_path.stat().st_size > 0:
+            logger.info(f"Test upload successful: {test_filename}")
+
+            return {
+                "success": True,
+                "message": "File upload test successful",
+                "filename": test_filename,
+                "file_size": file_size,
+                "bytes_written": bytes_written,
+                "file_path": str(file_path),
+                "verification": "File exists and has content"
+            }
+        else:
+            logger.error(f"Test upload failed verification: {test_filename}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "error": "File verification failed",
+                    "file_path": str(file_path)
+                }
+            )
+
+    except Exception as e:
+        logger.error(f"Test upload error for user {current_user_id}: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": str(e)
+            }
+        )
