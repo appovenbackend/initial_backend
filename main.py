@@ -252,26 +252,6 @@ os.makedirs("uploads", exist_ok=True)
 # Mount static files for uploaded images
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# Custom route to handle missing profile images
-@app.get("/uploads/profiles/{filename}")
-async def get_profile_image(filename: str):
-    """Serve profile images with fallback to default image"""
-    from pathlib import Path
-
-    # Check if the requested file exists
-    file_path = Path(f"uploads/profiles/{filename}")
-    if file_path.exists() and file_path.is_file():
-        # Return the actual file
-        return FileResponse(file_path, media_type='image/png')
-
-    # Return default avatar for missing files
-    default_path = Path("uploads/profiles/default_avatar.png")
-    if default_path.exists():
-        return FileResponse(default_path, media_type='image/png')
-
-    # If even default doesn't exist, return 404
-    raise HTTPException(status_code=404, detail="Profile image not found")
-
 @app.get("/")
 def root():
     return {"msg": "Fitness Event Booking API running (times shown in IST)."}
