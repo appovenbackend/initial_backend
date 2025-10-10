@@ -288,6 +288,9 @@ async def get_registered_users_for_event(request: Request, event_id: str):
     if not e:
         raise HTTPException(status_code=404, detail="Event not found")
 
+    # Get current user ID for connection checking
+    current_user_id = get_current_user_id(request)
+
     # Load tickets for this event
     tickets = read_tickets()
     event_tickets = [t for t in tickets if t["eventId"] == event_id]
@@ -300,13 +303,28 @@ async def get_registered_users_for_event(request: Request, event_id: str):
         t["userId"] for t in event_tickets if t.get("isValidated", False)
     )
 
-    # Load users and include validation status
+    # Load users and user connections for connection status checking
     users = read_users()
+    user_follows = read_user_follows()
+
     users_with_status = []
     for u in users:
         if u["id"] in user_ids:
             user_entry = u.copy()
             user_entry["is_validated"] = u["id"] in validated_user_ids
+
+            # Check if this user is connected to the current user
+            # Look for accepted connection in either direction
+            is_connected = False
+            for follow in user_follows:
+                if follow["status"] == "accepted" and (
+                    (follow["follower_id"] == current_user_id and follow["following_id"] == u["id"]) or
+                    (follow["follower_id"] == u["id"] and follow["following_id"] == current_user_id)
+                ):
+                    is_connected = True
+                    break
+
+            user_entry["is_connected"] = is_connected
             users_with_status.append(user_entry)
 
     return {

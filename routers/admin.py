@@ -40,10 +40,23 @@ class PointAwardRequest(BaseModel):
     points: int = Field(..., gt=0, le=10000, description="Number of points to award")
     reason: str = Field(..., min_length=1, max_length=200, description="Reason for awarding points")
 
+class UserProfile(BaseModel):
+    id: str
+    name: str
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    picture: Optional[str] = None
+    bio: Optional[str] = None
+    strava_link: Optional[str] = None
+    instagram_id: Optional[str] = None
+    is_private: bool = False
+    createdAt: str
+
 class UserPointsResponse(BaseModel):
     user_id: str
     current_points: int
     transaction_history: List[Dict[str, Any]]
+    user_profile: UserProfile
 
 @router.post("/deduct-points", response_model=Dict[str, Any])
 @require_role(UserRole.ADMIN)
@@ -230,23 +243,38 @@ async def get_user_points_admin(
 ):
     """
     Get detailed points information for a user (Admin only)
-    Returns current points and transaction history for audit purposes.
+    Returns current points, transaction history, and user profile for audit purposes.
     """
     try:
-        # Validate user exists
+        # Validate user exists and get user data
         users = read_users()
-        user_exists = any(u["id"] == user_id for u in users)
+        user = next((u for u in users if u["id"] == user_id), None)
 
-        if not user_exists:
+        if not user:
             raise ValidationError(f"User with ID '{user_id}' not found")
 
         # Get user points details
         user_points = get_user_points(user_id)
 
+        # Build user profile
+        user_profile = UserProfile(
+            id=user["id"],
+            name=user["name"],
+            phone=user.get("phone"),
+            email=user.get("email"),
+            picture=user.get("picture"),
+            bio=user.get("bio"),
+            strava_link=user.get("strava_link"),
+            instagram_id=user.get("instagram_id"),
+            is_private=user.get("is_private", False),
+            createdAt=user.get("createdAt", "")
+        )
+
         return UserPointsResponse(
             user_id=user_id,
             current_points=user_points.get("total_points", 0),
-            transaction_history=user_points.get("transaction_history", [])
+            transaction_history=user_points.get("transaction_history", []),
+            user_profile=user_profile
         )
 
     except ValidationError as e:
