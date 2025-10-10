@@ -519,7 +519,6 @@ async def update_user(
 
                 # Optimize the uploaded image
                 from utils.file_security import optimize_image
-                from pathlib import Path
 
                 image_path = Path(f"uploads/profiles/{unique_filename}")
                 try:
