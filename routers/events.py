@@ -25,7 +25,7 @@ from models.event import Event
 from utils.database import (
     read_events, write_events, read_tickets, read_users, read_event_join_requests,
     create_event_join_request, get_event_join_request, update_event_join_request_status,
-    get_event_join_requests_by_event, TicketDB, ReceivedQrTokenDB, EventDB, write_tickets, write_users
+    get_event_join_requests_by_event, TicketDB, ReceivedQrTokenDB, EventDB, write_tickets, write_users, read_user_follows
 )
 from core.config import IST
 from services.qr_service import create_qr_token
