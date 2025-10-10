@@ -679,6 +679,7 @@ async def get_user_points(request: Request, current_user_id: str = Depends(get_c
 @router.post("/test-upload")
 @api_rate_limit("authenticated")
 async def test_file_upload(
+    request: Request,
     picture: UploadFile = File(...),
     current_user_id: str = Depends(get_current_user_id)
 ):
