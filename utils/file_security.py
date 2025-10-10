@@ -306,7 +306,12 @@ def optimize_image(image_path: Path, max_size: tuple = (800, 800), quality: int 
             new_height = int(original_height * scale_factor)
 
             # Resize image
-            resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            try:
+                # Try new PIL API (PIL 9.1+)
+                resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            except AttributeError:
+                # Fall back to old PIL API
+                resized_img = img.resize((new_width, new_height), Image.LANCZOS)
 
             # Save optimized image (overwrite original)
             if image_path.suffix.lower() in ['.jpg', '.jpeg']:
