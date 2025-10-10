@@ -425,52 +425,15 @@ async def update_user(
 
     if picture is not None:
         try:
-            # Validate file object
-            if not picture.file:
-                logger.error(f"Invalid file object for user {user_id}")
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": "INVALID_FILE",
-                        "message": "Invalid file uploaded.",
-                        "code": "AUTH_017",
-                        "timestamp": datetime.now(IST).isoformat()
-                    }
-                )
+            # Use comprehensive file security validation
+            from utils.file_security import validate_profile_image
 
-            # Validate file size (max 5MB)
-            file_size = 0
-            picture.file.seek(0, 2)  # Seek to end
-            file_size = picture.file.tell()
-            picture.file.seek(0)  # Reset to beginning
+            logger.info(f"Starting profile picture upload for user {user_id}")
 
-            if file_size > 5 * 1024 * 1024:  # 5MB limit
-                logger.error(f"File too large for user {user_id}: {file_size} bytes")
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": "FILE_TOO_LARGE",
-                        "message": "File size exceeds 5MB limit.",
-                        "code": "AUTH_018",
-                        "timestamp": datetime.now(IST).isoformat()
-                    }
-                )
+            # Validate the uploaded file using comprehensive security checks
+            validation_result = validate_profile_image(picture)
 
-            # Validate file extension
-            allowed_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
-            file_extension = Path(picture.filename).suffix.lower()
-
-            if file_extension not in allowed_extensions:
-                logger.error(f"Invalid file type for user {user_id}: {file_extension}")
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": "INVALID_FILE_TYPE",
-                        "message": f"File type {file_extension} not allowed. Allowed types: {', '.join(allowed_extensions)}",
-                        "code": "AUTH_019",
-                        "timestamp": datetime.now(IST).isoformat()
-                    }
-                )
+            logger.info(f"File validation passed for user {user_id}: {validation_result['filename']} ({validation_result['file_size']} bytes)")
 
             # Create uploads directory if it doesn't exist
             upload_dir = Path("uploads/profiles")
@@ -489,28 +452,41 @@ async def update_user(
                     }
                 )
 
-            # Generate unique filename with security validation
-            sanitized_filename = input_validator.sanitize_filename(picture.filename)
-            unique_filename = f"{user_id}_{uuid4().hex[:8]}{file_extension}"
+            # Generate secure filename
+            unique_filename = f"{user_id}_{uuid4().hex[:8]}{validation_result['extension']}"
             file_path = upload_dir / unique_filename
 
             logger.info(f"Attempting to save file for user {user_id}: {file_path}")
 
-            # Save the uploaded file with error handling
+            # Atomic file operation with rollback capability
+            temp_file_path = None
             try:
+                # Create temporary file for atomic operation
+                import tempfile
+                import os
+
+                # Create temporary file in the same directory to ensure atomic move
+                temp_fd, temp_file_path = tempfile.mkstemp(suffix=validation_result['extension'], dir=upload_dir)
+                temp_file = os.fdopen(temp_fd, 'wb')
+
+                # Write file content in chunks
                 bytes_written = 0
-                with open(file_path, "wb") as buffer:
-                    chunk = picture.file.read(8192)  # Read in 8KB chunks
-                    while chunk:
-                        buffer.write(chunk)
-                        bytes_written += len(chunk)
-                        chunk = picture.file.read(8192)
+                chunk = picture.file.read(8192)  # Read in 8KB chunks
+                while chunk:
+                    temp_file.write(chunk)
+                    bytes_written += len(chunk)
+                    chunk = picture.file.read(8192)
 
-                logger.info(f"Successfully saved file for user {user_id}: {unique_filename} ({bytes_written} bytes)")
+                temp_file.close()
 
-                # Verify file was actually written
-                if not file_path.exists() or file_path.stat().st_size == 0:
-                    logger.error(f"File verification failed for user {user_id}: {unique_filename}")
+                logger.info(f"Successfully wrote temp file for user {user_id}: {bytes_written} bytes")
+
+                # Verify temporary file was written correctly
+                if not os.path.exists(temp_file_path) or os.path.getsize(temp_file_path) == 0:
+                    logger.error(f"Temp file verification failed for user {user_id}")
+                    # Clean up temp file
+                    if temp_file_path and os.path.exists(temp_file_path):
+                        os.unlink(temp_file_path)
                     return JSONResponse(
                         status_code=500,
                         content={
@@ -521,14 +497,52 @@ async def update_user(
                         }
                     )
 
+                # Atomic move from temp file to final location
+                final_file_path = upload_dir / unique_filename
+                os.rename(temp_file_path, final_file_path)
+
+                # Verify final file exists and has correct size
+                if not final_file_path.exists() or final_file_path.stat().st_size != bytes_written:
+                    logger.error(f"Final file verification failed for user {user_id}")
+                    # Clean up final file if it exists
+                    if final_file_path.exists():
+                        os.unlink(final_file_path)
+                    return JSONResponse(
+                        status_code=500,
+                        content={
+                            "error": "FILE_FINALIZE_ERROR",
+                            "message": "Failed to finalize file save operation.",
+                            "code": "AUTH_024",
+                            "timestamp": datetime.now(IST).isoformat()
+                        }
+                    )
+
+                # Optimize the uploaded image
+                from utils.file_security import optimize_image
+                from pathlib import Path
+
+                image_path = Path(f"uploads/profiles/{unique_filename}")
+                try:
+                    optimized_path = optimize_image(image_path, max_size=(800, 800), quality=85)
+                    logger.info(f"Image optimization completed for {unique_filename}")
+                except Exception as opt_error:
+                    logger.warning(f"Image optimization failed for {unique_filename}: {opt_error}")
+                    # Continue with original file if optimization fails
+
                 # Store the relative path in user record
                 user["picture"] = f"/uploads/profiles/{unique_filename}"
                 updated = True
 
-                logger.info(f"Profile picture updated for user {user_id}: {unique_filename}")
+                logger.info(f"Profile picture updated successfully for user {user_id}: {unique_filename}")
 
             except Exception as file_error:
                 logger.error(f"Failed to save file for user {user_id}: {file_error}")
+                # Clean up temp file if it exists
+                if temp_file_path and os.path.exists(temp_file_path):
+                    try:
+                        os.unlink(temp_file_path)
+                    except:
+                        pass
                 return JSONResponse(
                     status_code=500,
                     content={
@@ -539,6 +553,10 @@ async def update_user(
                     }
                 )
 
+        except HTTPException as http_error:
+            # Re-raise HTTP exceptions (validation errors)
+            logger.error(f"File validation failed for user {user_id}: {http_error.detail}")
+            raise
         except Exception as upload_error:
             logger.error(f"Unexpected error during file upload for user {user_id}: {upload_error}")
             return JSONResponse(
@@ -686,62 +704,104 @@ async def test_file_upload(
     try:
         logger.info(f"Test upload initiated for user {current_user_id}")
 
-        # Validate file object
-        if not picture.file:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "Invalid file object"}
-            )
+        # Use comprehensive file security validation
+        from utils.file_security import validate_profile_image
 
-        # Get file size
-        picture.file.seek(0, 2)
-        file_size = picture.file.tell()
-        picture.file.seek(0)
+        # Validate the uploaded file using comprehensive security checks
+        validation_result = validate_profile_image(picture)
 
-        logger.info(f"Test upload file size: {file_size} bytes")
+        logger.info(f"File validation passed for user {current_user_id}: {validation_result['filename']} ({validation_result['file_size']} bytes)")
 
         # Create uploads directory if it doesn't exist
         upload_dir = Path("uploads/profiles")
         upload_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate test filename
-        file_extension = Path(picture.filename).suffix
-        test_filename = f"test_{current_user_id}_{uuid4().hex[:8]}{file_extension}"
+        test_filename = f"test_{current_user_id}_{uuid4().hex[:8]}{validation_result['extension']}"
         file_path = upload_dir / test_filename
 
-        # Save the file
-        bytes_written = 0
-        with open(file_path, "wb") as buffer:
-            chunk = picture.file.read(8192)
+        # Atomic file operation with rollback capability
+        temp_file_path = None
+        try:
+            # Create temporary file for atomic operation
+            import tempfile
+            import os
+
+            # Create temporary file in the same directory to ensure atomic move
+            temp_fd, temp_file_path = tempfile.mkstemp(suffix=validation_result['extension'], dir=upload_dir)
+            temp_file = os.fdopen(temp_fd, 'wb')
+
+            # Write file content in chunks
+            bytes_written = 0
+            chunk = picture.file.read(8192)  # Read in 8KB chunks
             while chunk:
-                buffer.write(chunk)
+                temp_file.write(chunk)
                 bytes_written += len(chunk)
                 chunk = picture.file.read(8192)
 
-        # Verify file was written
-        if file_path.exists() and file_path.stat().st_size > 0:
-            logger.info(f"Test upload successful: {test_filename}")
+            temp_file.close()
 
-            return {
-                "success": True,
-                "message": "File upload test successful",
-                "filename": test_filename,
-                "file_size": file_size,
-                "bytes_written": bytes_written,
-                "file_path": str(file_path),
-                "verification": "File exists and has content"
-            }
-        else:
-            logger.error(f"Test upload failed verification: {test_filename}")
+            logger.info(f"Successfully wrote temp file for user {current_user_id}: {bytes_written} bytes")
+
+            # Atomic move from temp file to final location
+            final_file_path = upload_dir / test_filename
+            os.rename(temp_file_path, final_file_path)
+
+            # Optimize the uploaded image
+            from utils.file_security import optimize_image
+
+            try:
+                optimized_path = optimize_image(final_file_path, max_size=(800, 800), quality=85)
+                logger.info(f"Image optimization completed for test file {test_filename}")
+            except Exception as opt_error:
+                logger.warning(f"Image optimization failed for test file {test_filename}: {opt_error}")
+
+            # Verify file was written and optimized
+            if final_file_path.exists() and final_file_path.stat().st_size > 0:
+                logger.info(f"Test upload successful: {test_filename}")
+
+                return {
+                    "success": True,
+                    "message": "File upload test successful",
+                    "filename": test_filename,
+                    "file_size": validation_result['file_size'],
+                    "bytes_written": bytes_written,
+                    "file_path": str(final_file_path),
+                    "mime_type": validation_result['mime_type'],
+                    "verification": "File exists and has content",
+                    "optimization": "Applied" if Image else "Skipped (PIL not available)"
+                }
+            else:
+                logger.error(f"Test upload failed verification: {test_filename}")
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "success": False,
+                        "error": "File verification failed",
+                        "file_path": str(final_file_path)
+                    }
+                )
+
+        except Exception as file_error:
+            logger.error(f"Failed to save test file for user {current_user_id}: {file_error}")
+            # Clean up temp file if it exists
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.unlink(temp_file_path)
+                except:
+                    pass
             return JSONResponse(
                 status_code=500,
                 content={
                     "success": False,
-                    "error": "File verification failed",
-                    "file_path": str(file_path)
+                    "error": f"File save error: {str(file_error)}"
                 }
             )
 
+    except HTTPException as http_error:
+        # Re-raise HTTP exceptions (validation errors)
+        logger.error(f"File validation failed for user {current_user_id}: {http_error.detail}")
+        raise
     except Exception as e:
         logger.error(f"Test upload error for user {current_user_id}: {e}")
         return JSONResponse(
@@ -749,5 +809,45 @@ async def test_file_upload(
             content={
                 "success": False,
                 "error": str(e)
+            }
+        )
+
+@router.post("/admin/cleanup-uploads")
+@api_rate_limit("admin")
+async def cleanup_uploads(
+    request: Request,
+    max_age_hours: int = 24,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """Admin endpoint to clean up old upload files"""
+    try:
+        # Check if user is admin
+        users = _load_users()
+        current_user = next((u for u in users if u["id"] == current_user_id), None)
+        if not current_user or current_user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        from utils.file_security import cleanup_failed_uploads
+        from pathlib import Path
+
+        upload_dir = Path("uploads/profiles")
+        cleanup_failed_uploads(upload_dir, max_age_hours)
+
+        return {
+            "success": True,
+            "message": f"Upload cleanup completed for files older than {max_age_hours} hours",
+            "directory": str(upload_dir),
+            "timestamp": datetime.now(IST).isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Upload cleanup failed: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": f"Cleanup failed: {str(e)}"
             }
         )

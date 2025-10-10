@@ -16,11 +16,26 @@ depends_on = None
 
 
 def upgrade():
-    # Add requires_approval column to events table
-    op.add_column('events', sa.Column('requires_approval', sa.Boolean(), nullable=True, default=False))
+    # Check if column already exists before adding (for PostgreSQL compatibility)
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
 
-    # Create event_join_requests table
-    op.create_table(
+    # Get existing columns
+    existing_columns = [col['name'] for col in inspector.get_columns('events')]
+
+    # Only add column if it doesn't exist
+    if 'requires_approval' not in existing_columns:
+        op.add_column('events', sa.Column('requires_approval', sa.Boolean(), nullable=True, default=False))
+        print("✅ Added requires_approval column to events table")
+    else:
+        print("ℹ️  requires_approval column already exists in events table")
+
+    # Check if table already exists before creating
+    existing_tables = inspector.get_table_names()
+
+    # Only create table if it doesn't exist
+    if 'event_join_requests' not in existing_tables:
+        op.create_table(
         'event_join_requests',
         sa.Column('id', sa.String(), nullable=False),
         sa.Column('user_id', sa.String(), nullable=False),

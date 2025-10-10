@@ -26,8 +26,10 @@ def _table_exists(bind, table_name: str) -> bool:
 def upgrade() -> None:
     bind = op.get_bind()
     if _table_exists(bind, 'notification_templates'):
+        print("ℹ️  notification_templates table already exists")
         return
 
+    print("✅ Creating notification_templates table")
     op.create_table(
         'notification_templates',
         sa.Column('id', sa.String(), primary_key=True, index=True),

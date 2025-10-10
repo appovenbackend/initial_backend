@@ -16,8 +16,19 @@ depends_on = None
 
 
 def upgrade():
-    # Add registration_open column to events table
-    op.add_column('events', sa.Column('registration_open', sa.Boolean(), nullable=True, default=True))
+    # Check if column already exists before adding (for PostgreSQL compatibility)
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    # Get existing columns
+    existing_columns = [col['name'] for col in inspector.get_columns('events')]
+
+    # Only add column if it doesn't exist
+    if 'registration_open' not in existing_columns:
+        op.add_column('events', sa.Column('registration_open', sa.Boolean(), nullable=True, default=True))
+        print("✅ Added registration_open column to events table")
+    else:
+        print("ℹ️  registration_open column already exists in events table")
 
 
 def downgrade():

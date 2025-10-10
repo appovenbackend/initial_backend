@@ -20,8 +20,19 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    # Add source column to received_qr_tokens table (nullable for SQLite compatibility)
-    op.add_column('received_qr_tokens', sa.Column('source', sa.String(), nullable=True))
+    # Check if column already exists before adding (for PostgreSQL compatibility)
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    # Get existing columns
+    existing_columns = [col['name'] for col in inspector.get_columns('received_qr_tokens')]
+
+    # Only add column if it doesn't exist
+    if 'source' not in existing_columns:
+        op.add_column('received_qr_tokens', sa.Column('source', sa.String(), nullable=True))
+        print("✅ Added source column to received_qr_tokens table")
+    else:
+        print("ℹ️  source column already exists in received_qr_tokens table")
 
 
 def downgrade() -> None:

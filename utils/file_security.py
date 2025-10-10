@@ -3,15 +3,28 @@ File Upload Security Utilities
 Provides comprehensive file upload validation and security checks
 """
 import os
-import magic
 import hashlib
 import shutil
 from pathlib import Path
 from fastapi import HTTPException, status, UploadFile
 from typing import Dict, List, Set, Tuple
 import logging
-from PIL import Image
 import tempfile
+from datetime import datetime
+
+# Import PIL with fallback
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
+    logging.warning("PIL (Pillow) not available - image validation will be limited")
+
+# Import magic with fallback
+try:
+    import magic
+except ImportError:
+    magic = None
+    logging.warning("python-magic not available - MIME type detection will use fallback method")
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +65,16 @@ class FileSecurityValidator:
     def __init__(self):
         """Initialize file security validator"""
         try:
+            import magic
             self.magic = magic.Magic(mime=True)
+        except ImportError as e:
+            logger.warning(f"python-magic not installed: {e}")
+            self.magic = None
         except Exception as e:
             logger.warning(f"Could not initialize python-magic: {e}")
             self.magic = None
 
-    def validate_file_upload(self, file: UploadFile, allowed_types: Set[str] = None) -> Dict:
+    def validate_file_upload(self, file: UploadFile, allowed_types: Set[str] = None):
         """
         Comprehensive file upload validation
 
@@ -168,7 +185,7 @@ class FileSecurityValidator:
             return 'image/png'
         elif content.startswith(b'\x47\x49\x46'):
             return 'image/gif'
-        elif content.startswith(b'\x52\x49\x46\x46') and content[8:12] == b'\x57\x45\x42\x50'):
+        elif content.startswith(b'\x52\x49\x46\x46') and len(content) >= 12 and content[8:12] == b'\x57\x45\x42\x50':
             return 'image/webp'
 
         return 'application/octet-stream'
@@ -243,6 +260,100 @@ def validate_secure_filename(original_filename: str, user_id: str) -> str:
     """Generate secure filename for uploads"""
     validator = FileSecurityValidator()
     return validator.generate_secure_filename(original_filename, user_id)
+
+def optimize_image(image_path: Path, max_size: tuple = (800, 800), quality: int = 85) -> Path:
+    """
+    Optimize image by resizing and compressing
+
+    Args:
+        image_path: Path to the image file
+        max_size: Maximum dimensions (width, height)
+        quality: JPEG quality (1-100)
+
+    Returns:
+        Path to optimized image (same as input if optimization not needed)
+    """
+    try:
+        if Image is None:
+            logger.warning("PIL not available - skipping image optimization")
+            return image_path
+
+        with Image.open(image_path) as img:
+            # Convert to RGB if necessary (handles PNG with transparency)
+            if img.mode in ('RGBA', 'LA', 'P'):
+                # Create white background
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                img = background
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+
+            # Calculate new dimensions maintaining aspect ratio
+            original_width, original_height = img.size
+            max_width, max_height = max_size
+
+            if original_width <= max_width and original_height <= max_height:
+                logger.info(f"Image {image_path.name} already within size limits")
+                return image_path
+
+            # Calculate scaling factor
+            width_ratio = max_width / original_width
+            height_ratio = max_height / original_height
+            scale_factor = min(width_ratio, height_ratio)
+
+            new_width = int(original_width * scale_factor)
+            new_height = int(original_height * scale_factor)
+
+            # Resize image
+            resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+            # Save optimized image (overwrite original)
+            if image_path.suffix.lower() in ['.jpg', '.jpeg']:
+                resized_img.save(image_path, 'JPEG', quality=quality, optimize=True)
+            else:
+                resized_img.save(image_path, 'PNG', optimize=True)
+
+            logger.info(f"Optimized image {image_path.name}: {original_width}x{original_height} -> {new_width}x{new_height}")
+            return image_path
+
+    except Exception as e:
+        logger.error(f"Failed to optimize image {image_path}: {e}")
+        return image_path
+
+def cleanup_failed_uploads(upload_dir: Path, max_age_hours: int = 24):
+    """
+    Clean up temporary or failed upload files
+
+    Args:
+        upload_dir: Directory to clean up
+        max_age_hours: Maximum age of files to keep (hours)
+    """
+    try:
+        if not upload_dir.exists():
+            return
+
+        current_time = datetime.now()
+        cleaned_count = 0
+
+        for file_path in upload_dir.iterdir():
+            if file_path.is_file():
+                # Check file age
+                file_age = current_time - datetime.fromtimestamp(file_path.stat().st_mtime)
+                if file_age.total_seconds() > (max_age_hours * 3600):
+                    try:
+                        file_path.unlink()
+                        cleaned_count += 1
+                        logger.info(f"Cleaned up old upload file: {file_path.name}")
+                    except Exception as e:
+                        logger.error(f"Failed to clean up file {file_path}: {e}")
+
+        if cleaned_count > 0:
+            logger.info(f"Cleaned up {cleaned_count} old upload files from {upload_dir}")
+
+    except Exception as e:
+        logger.error(f"Failed to cleanup upload directory {upload_dir}: {e}")
 
 # Global validator instance
 file_validator = FileSecurityValidator()
