@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = '8_add_registration_open_to_events'
-down_revision = '20251007_add_notification_templates'
+down_revision = '7_add_requires_approval_and_join_requests'
 branch_labels = None
 depends_on = None
 
