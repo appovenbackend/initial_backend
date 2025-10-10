@@ -43,14 +43,13 @@ class FileSecurityValidator:
     # Maximum file sizes (in bytes)
     MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB for images
 
-    # Dangerous file signatures (magic numbers)
+    # Dangerous file signatures (magic numbers) - only block executables/compilables
     DANGEROUS_SIGNATURES = {
         b'\x4D\x5A': 'PE executable (Windows)',
         b'\x7F\x45\x4C\x46': 'ELF executable (Linux/Unix)',
         b'\xCA\xFE\xBA\xBE': 'Java class file',
         b'\xFE\xED\xFA': 'Mach-O executable (macOS)',
-        b'\x89\x50\x4E\x47': 'PNG (but check for malicious content)',
-        b'\xFF\xD8\xFF': 'JPEG (but check for malicious content)',
+        # Image signatures removed - valid images are allowed and validated with content checks
     }
 
     # File extensions that should be blocked
