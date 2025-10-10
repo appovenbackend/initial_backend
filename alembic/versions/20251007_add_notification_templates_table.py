@@ -13,7 +13,7 @@ from sqlalchemy.engine.reflection import Inspector
 
 # revision identifiers, used by Alembic.
 revision = '20251007_add_notification_templates'
-down_revision = 'dcedd7cbabb4_add_subscribedevents_column_to_users_'
+down_revision = 'dcedd7cbabb4'
 branch_labels = None
 depends_on = None
 
@@ -48,5 +48,3 @@ def downgrade() -> None:
     bind = op.get_bind()
     if _table_exists(bind, 'notification_templates'):
         op.drop_table('notification_templates')
-
-
