@@ -56,7 +56,12 @@ async def create_payment_order(
     event_id = eventId  # normalize variable name
 
     if not phone or not event_id:
-        raise HTTPException(status_code=400, detail="phone and eventId required")
+        from core.exceptions import ValidationError
+        error = ValidationError(
+            message="Phone number and event ID are required",
+            user_message="Please provide both phone number and event ID"
+        )
+        raise error
     
     # Validate input formats
     if not input_validator.validate_phone_number(phone):

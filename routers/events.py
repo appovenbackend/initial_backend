@@ -336,15 +336,14 @@ async def get_registered_users_for_event(request: Request, event_id: str):
 @api_rate_limit("admin")
 async def update_event_price(event_id: str, new_price: int, request: Request):
     if new_price < 0:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "error": "INVALID_PRICE",
-                "message": "Price cannot be negative.",
-                "code": "EVENTS_002",
-                "timestamp": datetime.now(IST).isoformat()
-            }
+        from utils.error_responses import create_field_validation_error
+        error = create_field_validation_error(
+            field="new_price",
+            message="Price cannot be negative",
+            code="INVALID_PRICE",
+            user_message="Please enter a valid price (0 or greater)"
         )
+        raise error
 
     events = _load_events()
     e = next((x for x in events if x["id"] == event_id), None)

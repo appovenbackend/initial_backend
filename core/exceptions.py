@@ -31,7 +31,7 @@ class ErrorSeverity(Enum):
     CRITICAL = "critical"
 
 class BaseCustomException(Exception):
-    """Base class for all custom exceptions"""
+    """Base class for all custom exceptions with frontend-friendly structure"""
 
     def __init__(
         self,
@@ -41,7 +41,9 @@ class BaseCustomException(Exception):
         status_code: int = 500,
         error_code: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None,
-        request_id: Optional[str] = None
+        request_id: Optional[str] = None,
+        user_message: Optional[str] = None,
+        field: Optional[str] = None
     ):
         super().__init__(message)
         self.message = message
@@ -51,10 +53,16 @@ class BaseCustomException(Exception):
         self.error_code = error_code or f"{category.value.upper()}_001"
         self.details = details or {}
         self.request_id = request_id
+        self.user_message = user_message or self._generate_user_message()
+        self.field = field
         self.timestamp = datetime.now(IST).isoformat()
 
+    def _generate_user_message(self) -> str:
+        """Generate user-friendly message from technical message"""
+        return self.message
+
     def to_dict(self) -> Dict[str, Any]:
-        """Convert exception to dictionary for API response"""
+        """Convert exception to dictionary for API response (legacy format)"""
         return {
             "error": True,
             "message": self.message,
@@ -66,6 +74,72 @@ class BaseCustomException(Exception):
             "request_id": self.request_id,
             "timestamp": self.timestamp
         }
+
+    def to_frontend_dict(self, request_path: str = None, request_method: str = None) -> Dict[str, Any]:
+        """Convert exception to frontend-friendly dictionary"""
+        response = {
+            "success": False,
+            "error": {
+                "type": self._get_error_type(),
+                "code": self.error_code,
+                "message": self.message,
+                "userMessage": self.user_message,
+                "severity": self.severity.value
+            },
+            "meta": {
+                "requestId": self.request_id,
+                "timestamp": self.timestamp
+            }
+        }
+
+        # Add path and method if provided
+        if request_path or request_method:
+            response["meta"]["path"] = request_path
+            response["meta"]["method"] = request_method
+
+        # Add field-specific error information for validation errors
+        if self.field:
+            response["error"]["field"] = self.field
+
+        # Add field errors for validation errors with multiple fields
+        if self.category == ErrorCategory.VALIDATION and self.details:
+            field_errors = self._extract_field_errors()
+            if field_errors:
+                response["error"]["fieldErrors"] = field_errors
+
+        return response
+
+    def _get_error_type(self) -> str:
+        """Get frontend-friendly error type"""
+        type_mapping = {
+            ErrorCategory.VALIDATION: "validation_error",
+            ErrorCategory.AUTHENTICATION: "authentication_error",
+            ErrorCategory.AUTHORIZATION: "authorization_error",
+            ErrorCategory.DATABASE: "database_error",
+            ErrorCategory.PAYMENT: "payment_error",
+            ErrorCategory.EXTERNAL_API: "external_api_error",
+            ErrorCategory.RATE_LIMIT: "rate_limit_error",
+            ErrorCategory.SECURITY: "security_error",
+            ErrorCategory.BUSINESS_LOGIC: "business_logic_error",
+            ErrorCategory.SYSTEM: "system_error"
+        }
+        return type_mapping.get(self.category, "unknown_error")
+
+    def _extract_field_errors(self) -> Dict[str, Any]:
+        """Extract field-specific errors from details"""
+        field_errors = {}
+
+        if isinstance(self.details, dict):
+            for key, value in self.details.items():
+                if isinstance(value, dict) and "field" in value:
+                    field_name = value["field"]
+                    field_errors[field_name] = {
+                        "message": value.get("message", self.message),
+                        "code": value.get("code", self.error_code),
+                        "severity": value.get("severity", self.severity.value)
+                    }
+
+        return field_errors
 
 # Validation Errors
 class ValidationError(BaseCustomException):

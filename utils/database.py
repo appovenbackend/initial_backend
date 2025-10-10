@@ -28,7 +28,7 @@ from core.config import (
     USE_PGBOUNCER,
 )
 
-# Create SQLAlchemy engine
+# Create SQLAlchemy engine with optimized configuration
 if USE_POSTGRESQL and DATABASE_URL:
     # Railway PostgreSQL with psycopg2
     db_url = DATABASE_URL
@@ -41,33 +41,48 @@ if USE_POSTGRESQL and DATABASE_URL:
 
     engine_kwargs = {
         "echo": False,
+        "future": True,  # Enable SQLAlchemy 2.0 style
         "connect_args": {
             "connect_timeout": DB_CONNECT_TIMEOUT,
-            "options": f"-c statement_timeout={DB_STATEMENT_TIMEOUT_MS}",
+            "options": f"-c statement_timeout={DB_STATEMENT_TIMEOUT_MS}ms",
+            "application_name": "FitnessEventAPI",
         },
     }
 
     if USE_PGBOUNCER:
-        # When using PgBouncer in transaction mode, it's recommended to disable pooling at the client
+        # When using PgBouncer in transaction mode, disable SQLAlchemy pooling
         engine = create_engine(db_url, poolclass=None, **engine_kwargs)
+        print("✅ Using PgBouncer - disabled SQLAlchemy connection pooling")
     else:
+        # Optimized connection pooling for high concurrency
         engine = create_engine(
             db_url,
             pool_pre_ping=DB_POOL_PRE_PING,
             pool_recycle=DB_POOL_RECYCLE,
-            pool_size=DB_POOL_SIZE,
-            max_overflow=DB_MAX_OVERFLOW,
+            pool_size=min(DB_POOL_SIZE, 20),  # Cap at 20 for stability
+            max_overflow=min(DB_MAX_OVERFLOW, 30),  # Cap overflow for stability
             pool_timeout=DB_POOL_TIMEOUT,
-            # SQLAlchemy 2.x allows pool_use_lifo to reduce contention
             pool_use_lifo=DB_POOL_USE_LIFO,
+            pool_reset_on_return='rollback',  # Ensure clean state
             **engine_kwargs,
         )
+        print(f"✅ PostgreSQL connection pool configured: size={min(DB_POOL_SIZE, 20)}, overflow={min(DB_MAX_OVERFLOW, 30)}")
 else:
-    # Local SQLite
+    # Local SQLite with improved configuration
+    print("⚠️  Using SQLite - not suitable for production concurrency")
+
+    # Use a more robust SQLite configuration
     engine = create_engine(
         f"sqlite:///{DATABASE_FILE}",
-        connect_args={"check_same_thread": False},
-        pool_pre_ping=True
+        connect_args={
+            "check_same_thread": False,  # Required for FastAPI but risky
+            "timeout": 20,  # SQLite timeout in seconds
+        },
+        pool_pre_ping=True,
+        pool_recycle=3600,  # Recycle connections every hour
+        pool_size=5,  # Small pool for SQLite
+        max_overflow=10,
+        echo=False
     )
 
 SessionLocal = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=engine))

@@ -50,37 +50,49 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
             # Handle custom exceptions
             e.request_id = request_id
             log_error(e, request)
-            return self._create_error_response(e)
+            return self._create_error_response(e, request)
 
         except RateLimitExceeded as e:
             # Handle rate limiting
             from core.exceptions import RateLimitError
             rate_limit_error = RateLimitError(request_id=request_id)
             log_error(rate_limit_error, request)
-            return self._create_error_response(rate_limit_error)
+            return self._create_error_response(rate_limit_error, request)
 
         except HTTPException as e:
             # Handle FastAPI HTTP exceptions
             custom_error = self._convert_http_exception(e, request_id)
             log_error(custom_error, request)
-            return self._create_error_response(custom_error)
+            return self._create_error_response(custom_error, request)
 
         except Exception as e:
             # Handle unexpected exceptions
             unexpected_error = self._handle_unexpected_error(e, request, request_id)
             log_error(unexpected_error, request)
-            return self._create_error_response(unexpected_error)
+            return self._create_error_response(unexpected_error, request)
 
-    def _create_error_response(self, error: BaseCustomException) -> JSONResponse:
-        """Create standardized error response"""
+    def _create_error_response(self, error: BaseCustomException, request: Request = None) -> JSONResponse:
+        """Create standardized error response with frontend-friendly format"""
+        # Use frontend-friendly format for better client integration
+        request_path = request.url.path if request else None
+        request_method = request.method if request else None
+
+        frontend_response = error.to_frontend_dict(request_path, request_method)
+
+        # Add rate limit headers for rate limiting errors
+        headers = {
+            "X-Error-Code": error.error_code,
+            "X-Error-Category": error.category.value,
+            "X-Request-ID": error.request_id or "unknown"
+        }
+
+        if error.category.value == "rate_limit":
+            headers["Retry-After"] = "60"  # Suggest retry after 60 seconds
+
         return JSONResponse(
             status_code=error.status_code,
-            content=error.to_dict(),
-            headers={
-                "X-Error-Code": error.error_code,
-                "X-Error-Category": error.category.value,
-                "X-Request-ID": error.request_id or "unknown"
-            }
+            content=frontend_response,
+            headers=headers
         )
 
     def _convert_http_exception(self, exc: HTTPException, request_id: str) -> BaseCustomException:

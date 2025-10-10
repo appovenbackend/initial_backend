@@ -57,15 +57,14 @@ async def register(user_register: SecureUserRegister, request: Request):
         # Check if phone number already exists
         existing_phone = next((u for u in users if u["phone"] == user_register.phone), None)
         if existing_phone:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": "PHONE_ALREADY_REGISTERED",
-                    "message": "Phone number already registered.",
-                    "code": "AUTH_005",
-                    "timestamp": datetime.now(IST).isoformat()
-                }
+            from utils.error_responses import create_field_validation_error
+            error = create_field_validation_error(
+                field="phone",
+                message="Phone number already registered",
+                code="PHONE_ALREADY_REGISTERED",
+                user_message="This phone number is already registered. Please use a different number or try logging in."
             )
+            raise error
 
         # Check if email already exists
         existing_email = next((u for u in users if u.get("email") == user_register.email), None)
