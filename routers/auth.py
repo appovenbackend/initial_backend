@@ -519,7 +519,6 @@ async def update_user(
 
                 # Optimize the uploaded image
                 from utils.file_security import optimize_image
-                from pathlib import Path
 
                 image_path = Path(f"uploads/profiles/{unique_filename}")
                 try:
@@ -558,7 +557,7 @@ async def update_user(
             logger.error(f"File validation failed for user {user_id}: {http_error.detail}")
             raise
         except Exception as upload_error:
-            logger.error(f"Unexpected error during file upload for user {user_id}: {upload_error}")
+            logger.error(f"Unexpected error during file upload for user {user_id}: {upload_error}", exc_info=True)
             return JSONResponse(
                 status_code=500,
                 content={

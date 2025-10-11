@@ -43,14 +43,13 @@ class FileSecurityValidator:
     # Maximum file sizes (in bytes)
     MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB for images
 
-    # Dangerous file signatures (magic numbers)
+    # Dangerous file signatures (magic numbers) - only block executables/compilables
     DANGEROUS_SIGNATURES = {
         b'\x4D\x5A': 'PE executable (Windows)',
         b'\x7F\x45\x4C\x46': 'ELF executable (Linux/Unix)',
         b'\xCA\xFE\xBA\xBE': 'Java class file',
         b'\xFE\xED\xFA': 'Mach-O executable (macOS)',
-        b'\x89\x50\x4E\x47': 'PNG (but check for malicious content)',
-        b'\xFF\xD8\xFF': 'JPEG (but check for malicious content)',
+        # Image signatures removed - valid images are allowed and validated with content checks
     }
 
     # File extensions that should be blocked
@@ -307,7 +306,12 @@ def optimize_image(image_path: Path, max_size: tuple = (800, 800), quality: int 
             new_height = int(original_height * scale_factor)
 
             # Resize image
-            resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            try:
+                # Try new PIL API (PIL 9.1+)
+                resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            except AttributeError:
+                # Fall back to old PIL API
+                resized_img = img.resize((new_width, new_height), Image.LANCZOS)
 
             # Save optimized image (overwrite original)
             if image_path.suffix.lower() in ['.jpg', '.jpeg']:
