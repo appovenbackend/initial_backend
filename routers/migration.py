@@ -3,6 +3,8 @@ from sqlalchemy import create_engine, text
 from core.config import DATABASE_URL
 import os
 
+from migrate_db import migrate_events_table, migrate_received_qr_tokens_table
+
 router = APIRouter(prefix="/migration", tags=["Migration"])
 
 @router.post("/fix-registration-link")
@@ -169,3 +171,6 @@ async def get_migration_status():
             "error": str(e),
             "status": "error"
         }
+if __name__ == "__main__":
+    migrate_events_table()
+    migrate_received_qr_tokens_table()

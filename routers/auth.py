@@ -817,150 +817,141 @@ async def delete_user_profile(
     request: Request,
     current_user_id: str = Depends(get_current_user_id)
 ):
-    """Delete user profile and all associated data"""
-    try:
-        users = _load_users()
-        current_user = next((u for u in users if u["id"] == current_user_id), None)
+    """Delete user profile and all associated data - COMPLETE DATABASE REMOVAL"""
+    from sqlalchemy.orm import Session
+    from utils.database import SessionLocal, TicketDB, UserFollowDB, UserPointsDB, EventJoinRequestDB, UserDB
 
-        # Check if user exists and has permission to delete
-        target_user = next((u for u in users if u["id"] == user_id), None)
-        if not target_user:
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "error": "USER_NOT_FOUND",
-                    "message": "User not found.",
-                    "code": "AUTH_017",
-                    "timestamp": datetime.now(IST).isoformat()
-                }
-            )
+    # Get users list for validation and cleanup
+    users = _load_users()
+    current_user = next((u for u in users if u["id"] == current_user_id), None)
 
-        # Check permissions: users can delete their own profile, admins can delete any profile
-        is_admin = current_user and current_user.get("role") == "admin"
-        is_self_delete = current_user_id == user_id
+    # Check if target user exists
+    target_user = next((u for u in users if u["id"] == user_id), None)
+    if not target_user:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "USER_NOT_FOUND",
+                "message": "User not found.",
+                "code": "AUTH_017",
+                "timestamp": datetime.now(IST).isoformat()
+            }
+        )
 
-        if not (is_admin or is_self_delete):
-            return JSONResponse(
-                status_code=403,
-                content={
-                    "error": "FORBIDDEN_DELETE",
-                    "message": "Can only delete your own profile or be an admin.",
-                    "code": "AUTH_018",
-                    "timestamp": datetime.now(IST).isoformat()
-                }
-            )
+    # Check permissions
+    is_admin = current_user and current_user.get("role") == "admin"
+    is_self_delete = current_user_id == user_id
 
-        # Prevent admin from deleting themselves
-        if is_admin and is_self_delete:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": "ADMIN_SELF_DELETE",
-                    "message": "Admins cannot delete their own profile. Contact another admin.",
-                    "code": "AUTH_019",
-                    "timestamp": datetime.now(IST).isoformat()
-                }
-            )
+    if not (is_admin or is_self_delete):
+        return JSONResponse(
+            status_code=403,
+            content={
+                "error": "FORBIDDEN_DELETE",
+                "message": "Can only delete your own profile or be an admin.",
+                "code": "AUTH_018",
+                "timestamp": datetime.now(IST).isoformat()
+            }
+        )
 
-        # Log the deletion action
-        logger.warning(f"User deletion initiated: {user_id} by {current_user_id} (admin: {is_admin})")
+    # Prevent admin from deleting themselves
+    if is_admin and is_self_delete:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "ADMIN_SELF_DELETE",
+                "message": "Admins cannot delete their own profile. Contact another admin.",
+                "code": "AUTH_019",
+                "timestamp": datetime.now(IST).isoformat()
+            }
+        )
 
-        # Clean up profile picture file if it exists
-        if target_user.get("picture"):
-            try:
-                picture_path = target_user["picture"]
-                if picture_path.startswith("/uploads/profiles/"):
-                    # Remove the leading slash and construct full path
-                    file_path = picture_path[1:]  # Remove leading slash
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                        logger.info(f"Profile picture deleted: {file_path}")
-                    else:
-                        logger.warning(f"Profile picture file not found: {file_path}")
-            except Exception as e:
-                logger.error(f"Failed to delete profile picture for user {user_id}: {e}")
-                # Continue with deletion even if file cleanup fails
+    # Log the deletion action
+    logger.warning(f"User deletion initiated: {user_id} by {current_user_id} (admin: {is_admin})")
 
-        # Clean up all related data from database
+    # Clean up profile picture file if it exists
+    if target_user.get("picture"):
         try:
-            from utils.database import (
-                get_db,
-                TicketDB,
-                UserFollowDB,
-                UserPointsDB,
-                EventJoinRequestDB,
-                UserDB
-            )
-
-            db = get_db()
-
-            # Delete user from database first (this is the key fix!)
-            user_deleted = db.query(UserDB).filter(UserDB.id == user_id).delete()
-
-            # Delete user's tickets
-            tickets_deleted = db.query(TicketDB).filter(TicketDB.userId == user_id).delete()
-
-            # Delete user's connections (both as follower and following)
-            connections_deleted = db.query(UserFollowDB).filter(
-                (UserFollowDB.follower_id == user_id) | (UserFollowDB.following_id == user_id)
-            ).delete()
-
-            # Delete user's points
-            points_deleted = db.query(UserPointsDB).filter(UserPointsDB.id == user_id).delete()
-
-            # Delete user's event join requests
-            join_requests_deleted = db.query(EventJoinRequestDB).filter(
-                EventJoinRequestDB.user_id == user_id
-            ).delete()
-
-            # Force commit all deletions immediately
-            db.commit()
-            logger.info(f"Database cleanup completed for user {user_id}: "
-                       f"user={user_deleted}, tickets={tickets_deleted}, connections={connections_deleted}, "
-                       f"points={points_deleted}, join_requests={join_requests_deleted}")
-
+            picture_path = target_user["picture"]
+            if picture_path.startswith("/uploads/profiles/"):
+                # Remove the leading slash and construct full path
+                file_path = picture_path[1:]  # Remove leading slash
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    logger.info(f"Profile picture deleted: {file_path}")
+                else:
+                    logger.warning(f"Profile picture file not found: {file_path}")
         except Exception as e:
-            logger.error(f"Database cleanup failed for user {user_id}: {e}")
-            # Continue with user deletion even if some cleanup fails
+            logger.error(f"Failed to delete profile picture for user {user_id}: {e}")
+            # Continue with deletion even if file cleanup fails
 
-        # Remove user from users list (this is for the in-memory cache)
-        users = [u for u in users if u["id"] != user_id]
+    # Database cleanup with proper session management
+    db = SessionLocal()
+    try:
+        # Delete user's tickets
+        tickets_deleted = db.query(TicketDB).filter(TicketDB.userId == user_id).delete(synchronize_session=False)
 
-        # Save updated users list (this updates the remaining users in the database)
-        _save_users(users)
+        # Delete user's connections (both as follower and following)
+        connections_deleted = db.query(UserFollowDB).filter(
+            (UserFollowDB.follower_id == user_id) | (UserFollowDB.following_id == user_id)
+        ).delete(synchronize_session=False)
 
-        # Log successful deletion
-        track_error("user_deleted", f"User {user_id} deleted by {current_user_id}", request=request)
+        # Delete user's points
+        points_deleted = db.query(UserPointsDB).filter(UserPointsDB.id == user_id).delete(synchronize_session=False)
 
-        return {
-            "success": True,
-            "message": "User profile and all associated data deleted successfully",
-            "deleted_user_id": user_id,
-            "deleted_by": current_user_id,
-            "cleanup_summary": {
-                "user_deleted": user_deleted if 'user_deleted' in locals() else 0,
-                "tickets_deleted": tickets_deleted if 'tickets_deleted' in locals() else 0,
-                "connections_deleted": connections_deleted if 'connections_deleted' in locals() else 0,
-                "points_deleted": points_deleted if 'points_deleted' in locals() else 0,
-                "join_requests_deleted": join_requests_deleted if 'join_requests_deleted' in locals() else 0
-            },
-            "timestamp": datetime.now(IST).isoformat()
-        }
+        # Delete user's event join requests
+        join_requests_deleted = db.query(EventJoinRequestDB).filter(
+            EventJoinRequestDB.user_id == user_id
+        ).delete(synchronize_session=False)
 
-    except HTTPException:
-        raise
+        # Delete user from database LAST (after all related data)
+        user_deleted = db.query(UserDB).filter(UserDB.id == user_id).delete(synchronize_session=False)
+
+        # Commit all deletions in a single transaction
+        db.commit()
+
+        logger.info(f"Database cleanup completed for user {user_id}: "
+                   f"user={user_deleted}, tickets={tickets_deleted}, connections={connections_deleted}, "
+                   f"points={points_deleted}, join_requests={join_requests_deleted}")
+
     except Exception as e:
-        logger.error(f"User deletion failed for {user_id}: {e}")
+        db.rollback()
+        logger.error(f"Database cleanup failed for user {user_id}: {e}")
         return JSONResponse(
             status_code=500,
             content={
                 "error": "DELETE_FAILED",
-                "message": "Failed to delete user profile.",
+                "message": "Failed to delete user from database.",
                 "code": "AUTH_020",
                 "timestamp": datetime.now(IST).isoformat(),
                 "details": str(e) if os.getenv("DEBUG", "false").lower() == "true" else None
             }
         )
+    finally:
+        db.close()
+
+    # Remove user from in-memory users list
+    users = [u for u in users if u["id"] != user_id]
+
+    # Save updated users list to sync with database
+    _save_users(users)
+
+    # Log successful deletion
+    track_error("user_deleted", f"User {user_id} deleted by {current_user_id}", request=request)
+
+    return {
+        "success": True,
+        "message": "User profile and all associated data deleted successfully",
+        "deleted_user_id": user_id,
+        "deleted_by": current_user_id,
+        "cleanup_summary": {
+            "user_deleted": user_deleted,
+            "tickets_deleted": tickets_deleted,
+            "connections_deleted": connections_deleted,
+            "points_deleted": points_deleted,
+            "join_requests_deleted": join_requests_deleted
+        },
+        "timestamp": datetime.now(IST).isoformat()
+    }
 
 @router.post("/admin/cleanup-uploads")
 @api_rate_limit("admin")
