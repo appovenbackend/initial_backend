@@ -894,7 +894,7 @@ async def delete_user_profile(
 
             db = get_db()
 
-            # Delete user from database first
+            # Delete user from database first (this is the key fix!)
             user_deleted = db.query(UserDB).filter(UserDB.id == user_id).delete()
 
             # Delete user's tickets
@@ -913,8 +913,9 @@ async def delete_user_profile(
                 EventJoinRequestDB.user_id == user_id
             ).delete()
 
-            # Commit all deletions
+            # Force commit all deletions immediately
             db.commit()
+            db.close()  # Close the session to ensure changes are flushed
 
             logger.info(f"Database cleanup completed for user {user_id}: "
                        f"user={user_deleted}, tickets={tickets_deleted}, connections={connections_deleted}, "
@@ -924,10 +925,10 @@ async def delete_user_profile(
             logger.error(f"Database cleanup failed for user {user_id}: {e}")
             # Continue with user deletion even if some cleanup fails
 
-        # Remove user from users list
+        # Remove user from users list (this is for the in-memory cache)
         users = [u for u in users if u["id"] != user_id]
 
-        # Save updated users list
+        # Save updated users list (this updates the remaining users in the database)
         _save_users(users)
 
         # Log successful deletion
