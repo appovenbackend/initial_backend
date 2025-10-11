@@ -921,7 +921,7 @@ async def delete_user_profile(
             # Continue with user deletion even if some cleanup fails
 
         # Remove user from users list
-        users = [u for u in users if u["id"] != user_id"]
+        users = [u for u in users if u["id"] != user_id]
 
         # Save updated users list
         _save_users(users)
