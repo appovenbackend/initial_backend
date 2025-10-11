@@ -136,8 +136,6 @@ async def register(user_register: SecureUserRegister, request: Request):
 @auth_rate_limit("login")
 async def login(user_login: SecureUserLogin, request: Request):
     try:
-
-
         users = _load_users()
 
         # Find user by phone number
@@ -519,6 +517,7 @@ async def update_user(
 
                 # Optimize the uploaded image
                 from utils.file_security import optimize_image
+                from pathlib import Path
 
                 image_path = Path(f"uploads/profiles/{unique_filename}")
                 try:
@@ -557,7 +556,7 @@ async def update_user(
             logger.error(f"File validation failed for user {user_id}: {http_error.detail}")
             raise
         except Exception as upload_error:
-            logger.error(f"Unexpected error during file upload for user {user_id}: {upload_error}", exc_info=True)
+            logger.error(f"Unexpected error during file upload for user {user_id}: {upload_error}")
             return JSONResponse(
                 status_code=500,
                 content={
@@ -768,7 +767,7 @@ async def test_file_upload(
                     "file_path": str(final_file_path),
                     "mime_type": validation_result['mime_type'],
                     "verification": "File exists and has content",
-                    "optimization": "Applied" if Image else "Skipped (PIL not available)"
+                    "optimization": "Applied" if 'optimized_path' in locals() and optimized_path else "Skipped (PIL not available)"
                 }
             else:
                 logger.error(f"Test upload failed verification: {test_filename}")
@@ -811,6 +810,154 @@ async def test_file_upload(
             }
         )
 
+@router.delete("/user/{user_id}")
+@api_rate_limit("authenticated")
+async def delete_user_profile(
+    user_id: str,
+    request: Request,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """Delete user profile and all associated data"""
+    try:
+        users = _load_users()
+        current_user = next((u for u in users if u["id"] == current_user_id), None)
+
+        # Check if user exists and has permission to delete
+        target_user = next((u for u in users if u["id"] == user_id), None)
+        if not target_user:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "error": "USER_NOT_FOUND",
+                    "message": "User not found.",
+                    "code": "AUTH_017",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
+
+        # Check permissions: users can delete their own profile, admins can delete any profile
+        is_admin = current_user and current_user.get("role") == "admin"
+        is_self_delete = current_user_id == user_id
+
+        if not (is_admin or is_self_delete):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "FORBIDDEN_DELETE",
+                    "message": "Can only delete your own profile or be an admin.",
+                    "code": "AUTH_018",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
+
+        # Prevent admin from deleting themselves
+        if is_admin and is_self_delete:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "ADMIN_SELF_DELETE",
+                    "message": "Admins cannot delete their own profile. Contact another admin.",
+                    "code": "AUTH_019",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
+
+        # Log the deletion action
+        logger.warning(f"User deletion initiated: {user_id} by {current_user_id} (admin: {is_admin})")
+
+        # Clean up profile picture file if it exists
+        if target_user.get("picture"):
+            try:
+                picture_path = target_user["picture"]
+                if picture_path.startswith("/uploads/profiles/"):
+                    # Remove the leading slash and construct full path
+                    file_path = picture_path[1:]  # Remove leading slash
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                        logger.info(f"Profile picture deleted: {file_path}")
+                    else:
+                        logger.warning(f"Profile picture file not found: {file_path}")
+            except Exception as e:
+                logger.error(f"Failed to delete profile picture for user {user_id}: {e}")
+                # Continue with deletion even if file cleanup fails
+
+        # Clean up all related data from database
+        try:
+            from utils.database import (
+                get_db,
+                TicketDB,
+                UserFollowDB,
+                UserPointsDB,
+                EventJoinRequestDB
+            )
+
+            db = get_db()
+
+            # Delete user's tickets
+            tickets_deleted = db.query(TicketDB).filter(TicketDB.userId == user_id).delete()
+
+            # Delete user's connections (both as follower and following)
+            connections_deleted = db.query(UserFollowDB).filter(
+                (UserFollowDB.follower_id == user_id) | (UserFollowDB.following_id == user_id)
+            ).delete()
+
+            # Delete user's points
+            points_deleted = db.query(UserPointsDB).filter(UserPointsDB.id == user_id).delete()
+
+            # Delete user's event join requests
+            join_requests_deleted = db.query(EventJoinRequestDB).filter(
+                EventJoinRequestDB.user_id == user_id
+            ).delete()
+
+            # Commit all deletions
+            db.commit()
+
+            logger.info(f"Database cleanup completed for user {user_id}: "
+                       f"tickets={tickets_deleted}, connections={connections_deleted}, "
+                       f"points={points_deleted}, join_requests={join_requests_deleted}")
+
+        except Exception as e:
+            logger.error(f"Database cleanup failed for user {user_id}: {e}")
+            # Continue with user deletion even if some cleanup fails
+
+        # Remove user from users list
+        users = [u for u in users if u["id"] != user_id"]
+
+        # Save updated users list
+        _save_users(users)
+
+        # Log successful deletion
+        track_error("user_deleted", f"User {user_id} deleted by {current_user_id}", request=request)
+
+        return {
+            "success": True,
+            "message": "User profile and all associated data deleted successfully",
+            "deleted_user_id": user_id,
+            "deleted_by": current_user_id,
+            "cleanup_summary": {
+                "tickets_deleted": tickets_deleted if 'tickets_deleted' in locals() else 0,
+                "connections_deleted": connections_deleted if 'connections_deleted' in locals() else 0,
+                "points_deleted": points_deleted if 'points_deleted' in locals() else 0,
+                "join_requests_deleted": join_requests_deleted if 'join_requests_deleted' in locals() else 0
+            },
+            "timestamp": datetime.now(IST).isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"User deletion failed for {user_id}: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "DELETE_FAILED",
+                "message": "Failed to delete user profile.",
+                "code": "AUTH_020",
+                "timestamp": datetime.now(IST).isoformat(),
+                "details": str(e) if os.getenv("DEBUG", "false").lower() == "true" else None
+            }
+        )
+
 @router.post("/admin/cleanup-uploads")
 @api_rate_limit("admin")
 async def cleanup_uploads(
@@ -848,105 +995,5 @@ async def cleanup_uploads(
             content={
                 "success": False,
                 "error": f"Cleanup failed: {str(e)}"
-            }
-        )
-
-@router.delete("/user/{user_id}")
-@api_rate_limit("authenticated")
-async def delete_user_profile(
-    user_id: str,
-    request: Request,
-    current_user_id: str = Depends(get_current_user_id)
-):
-    """Delete user profile (users can delete their own profile, admins can delete any profile)"""
-    try:
-        users = _load_users()
-
-        # Find the user to be deleted
-        user_to_delete = next((u for u in users if u["id"] == user_id), None)
-        if not user_to_delete:
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "error": "USER_NOT_FOUND",
-                    "message": "User not found.",
-                    "code": "AUTH_017",
-                    "timestamp": datetime.now(IST).isoformat()
-                }
-            )
-
-        # Find the current user (for authorization check)
-        current_user = next((u for u in users if u["id"] == current_user_id), None)
-        if not current_user:
-            raise HTTPException(status_code=404, detail="Current user not found")
-
-        # Authorization check: users can delete their own profile, admins can delete any profile
-        if current_user_id != user_id and current_user.get("role") != "admin":
-            return JSONResponse(
-                status_code=403,
-                content={
-                    "error": "FORBIDDEN_DELETE",
-                    "message": "Can only delete your own profile or must be admin to delete other profiles.",
-                    "code": "AUTH_018",
-                    "timestamp": datetime.now(IST).isoformat()
-                }
-            )
-
-        # Prevent admin from deleting themselves (safety measure)
-        if current_user_id == user_id and current_user.get("role") == "admin":
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": "ADMIN_SELF_DELETE_NOT_ALLOWED",
-                    "message": "Admin users cannot delete their own profiles. Contact another admin.",
-                    "code": "AUTH_019",
-                    "timestamp": datetime.now(IST).isoformat()
-                }
-            )
-
-        # Clean up profile picture if it exists
-        if user_to_delete.get("picture"):
-            try:
-                picture_path = user_to_delete["picture"]
-                # Remove leading slash if present
-                if picture_path.startswith("/"):
-                    picture_path = picture_path[1:]
-
-                file_path = Path(picture_path)
-                if file_path.exists():
-                    file_path.unlink()
-                    logger.info(f"Deleted profile picture for user {user_id}: {picture_path}")
-            except Exception as file_error:
-                logger.warning(f"Failed to delete profile picture for user {user_id}: {file_error}")
-                # Continue with user deletion even if file cleanup fails
-
-        # Remove user from the users list
-        users = [u for u in users if u["id"] != user_id]
-
-        # Save updated users list
-        _save_users(users)
-
-        # Log the deletion
-        log_user_registration(user_id, "user_deleted", request)
-
-        return {
-            "msg": "User profile deleted successfully",
-            "deleted_user_id": user_id,
-            "deleted_at": datetime.now(IST).isoformat()
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        track_error("user_deletion_failed", str(e), request=request)
-        logger.error(f"User deletion failed for user {user_id}: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": "USER_DELETION_FAILED",
-                "message": "Failed to delete user profile.",
-                "code": "AUTH_020",
-                "timestamp": datetime.now(IST).isoformat(),
-                "details": str(e) if os.getenv("DEBUG", "false").lower() == "true" else None
             }
         )
