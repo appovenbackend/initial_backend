@@ -851,3 +851,103 @@ async def cleanup_uploads(
                 "error": f"Cleanup failed: {str(e)}"
             }
         )
+
+@router.delete("/user/{user_id}")
+@api_rate_limit("authenticated")
+async def delete_user_profile(
+    user_id: str,
+    request: Request,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """Delete user profile (users can delete their own profile, admins can delete any profile)"""
+    try:
+        users = _load_users()
+
+        # Find the user to be deleted
+        user_to_delete = next((u for u in users if u["id"] == user_id), None)
+        if not user_to_delete:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "error": "USER_NOT_FOUND",
+                    "message": "User not found.",
+                    "code": "AUTH_017",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
+
+        # Find the current user (for authorization check)
+        current_user = next((u for u in users if u["id"] == current_user_id), None)
+        if not current_user:
+            raise HTTPException(status_code=404, detail="Current user not found")
+
+        # Authorization check: users can delete their own profile, admins can delete any profile
+        if current_user_id != user_id and current_user.get("role") != "admin":
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "FORBIDDEN_DELETE",
+                    "message": "Can only delete your own profile or must be admin to delete other profiles.",
+                    "code": "AUTH_018",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
+
+        # Prevent admin from deleting themselves (safety measure)
+        if current_user_id == user_id and current_user.get("role") == "admin":
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "ADMIN_SELF_DELETE_NOT_ALLOWED",
+                    "message": "Admin users cannot delete their own profiles. Contact another admin.",
+                    "code": "AUTH_019",
+                    "timestamp": datetime.now(IST).isoformat()
+                }
+            )
+
+        # Clean up profile picture if it exists
+        if user_to_delete.get("picture"):
+            try:
+                picture_path = user_to_delete["picture"]
+                # Remove leading slash if present
+                if picture_path.startswith("/"):
+                    picture_path = picture_path[1:]
+
+                file_path = Path(picture_path)
+                if file_path.exists():
+                    file_path.unlink()
+                    logger.info(f"Deleted profile picture for user {user_id}: {picture_path}")
+            except Exception as file_error:
+                logger.warning(f"Failed to delete profile picture for user {user_id}: {file_error}")
+                # Continue with user deletion even if file cleanup fails
+
+        # Remove user from the users list
+        users = [u for u in users if u["id"] != user_id]
+
+        # Save updated users list
+        _save_users(users)
+
+        # Log the deletion
+        log_user_registration(user_id, "user_deleted", request)
+
+        return {
+            "msg": "User profile deleted successfully",
+            "deleted_user_id": user_id,
+            "deleted_at": datetime.now(IST).isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        track_error("user_deletion_failed", str(e), request=request)
+        logger.error(f"User deletion failed for user {user_id}: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "USER_DELETION_FAILED",
+                "message": "Failed to delete user profile.",
+                "code": "AUTH_020",
+                "timestamp": datetime.now(IST).isoformat(),
+                "details": str(e) if os.getenv("DEBUG", "false").lower() == "true" else None
+            }
+        )
