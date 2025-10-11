@@ -144,7 +144,7 @@ async def login(user_login: SecureUserLogin, request: Request):
             return JSONResponse(
                 status_code=401,
                 content={
-                    {
+                    "error": {
                         "type": "USER_NOT_FOUND",
                         "message": "User not found. Please register first.",
                         "code": "AUTH_001",
@@ -158,7 +158,7 @@ async def login(user_login: SecureUserLogin, request: Request):
             return JSONResponse(
                 status_code=401,
                 content={
-                    {
+                    "error": {
                         "type": "USER_HAS_NO_PASSWORD",
                         "message": "User found but has no password. Please complete registration with password.",
                         "code": "AUTH_002",
@@ -172,7 +172,7 @@ async def login(user_login: SecureUserLogin, request: Request):
             return JSONResponse(
                 status_code=401,
                 content={
-                    {
+                    "error": {
                         "type": "INVALID_PASSWORD",
                         "message": "Invalid password provided.",
                         "code": "AUTH_003",
@@ -207,7 +207,7 @@ async def login(user_login: SecureUserLogin, request: Request):
         return JSONResponse(
             status_code=500,
             content={
-                {
+                "error": {
                     "type": "INTERNAL_ERROR",
                     "message": "Internal server error during login.",
                     "code": "AUTH_999",
