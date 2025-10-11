@@ -888,10 +888,14 @@ async def delete_user_profile(
                 TicketDB,
                 UserFollowDB,
                 UserPointsDB,
-                EventJoinRequestDB
+                EventJoinRequestDB,
+                UserDB
             )
 
             db = get_db()
+
+            # Delete user from database first
+            user_deleted = db.query(UserDB).filter(UserDB.id == user_id).delete()
 
             # Delete user's tickets
             tickets_deleted = db.query(TicketDB).filter(TicketDB.userId == user_id).delete()
@@ -913,7 +917,7 @@ async def delete_user_profile(
             db.commit()
 
             logger.info(f"Database cleanup completed for user {user_id}: "
-                       f"tickets={tickets_deleted}, connections={connections_deleted}, "
+                       f"user={user_deleted}, tickets={tickets_deleted}, connections={connections_deleted}, "
                        f"points={points_deleted}, join_requests={join_requests_deleted}")
 
         except Exception as e:
@@ -935,6 +939,7 @@ async def delete_user_profile(
             "deleted_user_id": user_id,
             "deleted_by": current_user_id,
             "cleanup_summary": {
+                "user_deleted": user_deleted if 'user_deleted' in locals() else 0,
                 "tickets_deleted": tickets_deleted if 'tickets_deleted' in locals() else 0,
                 "connections_deleted": connections_deleted if 'connections_deleted' in locals() else 0,
                 "points_deleted": points_deleted if 'points_deleted' in locals() else 0,
