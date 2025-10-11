@@ -915,8 +915,6 @@ async def delete_user_profile(
 
             # Force commit all deletions immediately
             db.commit()
-            db.close()  # Close the session to ensure changes are flushed
-
             logger.info(f"Database cleanup completed for user {user_id}: "
                        f"user={user_deleted}, tickets={tickets_deleted}, connections={connections_deleted}, "
                        f"points={points_deleted}, join_requests={join_requests_deleted}")
